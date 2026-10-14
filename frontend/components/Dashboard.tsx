@@ -49,10 +49,21 @@ const LOG_ACCENT: Record<LogLine["level"], { border: string; ts: string; text: s
   warn: { border: "#F3B64B", ts: "#B08E4C", text: "#D8C79A" },
 };
 
-// モード選択の表示（自律修正はリポジトリ＝ソースがある時だけ有効）
-const MODE_OPTIONS: { key: string; label: string; desc: string; needsRepo?: boolean }[] = [
-  { key: "advisory", label: "修正案", desc: "コードが分からないリポジトリ向け：侵入を実証し、修正案（対策方針）を提示する。状態は変えない" },
-  { key: "file", label: "自律修正", desc: "コードが分かるリポジトリ向け：実ソースを書き換え、再攻撃で防御を証明する", needsRepo: true },
+// モード選択の表示（どちらも常に選べる。自律修正はソースがあれば実ファイル書換、
+// 無ければ対象の安全な実装にHTTPで切替してから再攻撃で防御を証明する）
+const MODE_OPTIONS: { key: string; label: string; descRepo: string; descNoRepo: string }[] = [
+  {
+    key: "advisory",
+    label: "修正案",
+    descRepo: "コードが分からないリポジトリ向け：侵入を実証し、修正案（対策方針）を提示する。状態は変えない",
+    descNoRepo: "コードが分からないリポジトリ向け：侵入を実証し、修正案（対策方針）を提示する。状態は変えない",
+  },
+  {
+    key: "file",
+    label: "自律修正",
+    descRepo: "コードが分かるリポジトリ向け：実ソースを書き換え、再攻撃で防御を証明する",
+    descNoRepo: "侵入→修正→再攻撃まで自律実行。この公開環境はソース未接続のため、対象の安全な実装に切替えて防御を証明する",
+  },
 ];
 
 export default function Dashboard({
@@ -276,15 +287,16 @@ export default function Dashboard({
           <span style={{ fontSize: 12, color: "#6B7A92", whiteSpace: "nowrap" }}>モード</span>
           <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: "1px solid #2C3850" }}>
             {MODE_OPTIONS.map((m) => {
-              const disabled = running || (m.needsRepo && !repoAvailable);
+              const disabled = running;
               const active = selectedMode === m.key;
+              const desc = repoAvailable ? m.descRepo : m.descNoRepo;
               return (
                 <button
                   key={m.key}
                   type="button"
                   onClick={() => !disabled && setSelectedMode(m.key)}
                   disabled={disabled}
-                  title={m.needsRepo && !repoAvailable ? `${m.desc}（この環境ではリポジトリ未接続のため選べません）` : m.desc}
+                  title={desc}
                   style={{
                     padding: "7px 12px",
                     fontSize: 12,

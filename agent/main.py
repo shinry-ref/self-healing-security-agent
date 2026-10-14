@@ -89,13 +89,15 @@ VALID_MODES = ("file", "propose", "advisory", "flag")
 
 
 def _resolve_mode(requested: str | None) -> str:
-    """要求モードを検証し、使えないものは安全側（advisory）へ寄せる。"""
+    """要求モードを検証し、使えないものは成立する方式へ寄せる。"""
     m = (requested or FIX_MODE or "advisory").strip().lower()
     if m not in VALID_MODES:
         m = "advisory"
-    # ソース（リポジトリ）が無ければ実ファイル修正はできない → 提示のみへ縮退。
+    # 自律修正(file)はリポジトリ（＝ソース）がある時だけ実ファイルを書き換える。
+    # リポジトリが無い公開構成では flag（対象の安全な実装にHTTPで切替）にフォールバックし、
+    # 再攻撃で防御を証明する。どちらも「適用→再証明」まで自律で行う自律修正。
     if m == "file" and not sourcefix.repo_available():
-        m = "advisory"
+        m = "flag"
     return m
 
 
