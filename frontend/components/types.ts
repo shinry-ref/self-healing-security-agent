@@ -94,6 +94,10 @@ export interface Finding {
   breached: boolean;
   defended: boolean;
   proposed?: boolean;
+  summary?: string; // Gemini が出した要約（修正案 or 対策指針）
+  diff?: string; // 具体差分（propose/file のみ。advisory は空）
+  source?: string; // "Gemini" | "フォールバック"
+  fixFile?: string; // 直す対象ファイル（advisory は「非開示」）
 }
 
 export interface Report {

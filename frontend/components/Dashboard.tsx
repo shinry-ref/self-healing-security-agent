@@ -5,6 +5,7 @@ import IntrusionMap from "./IntrusionMap";
 import type {
   Approval,
   DiagnoseState,
+  Finding,
   Graph,
   LogLine,
   LoopState,
@@ -48,11 +49,10 @@ const LOG_ACCENT: Record<LogLine["level"], { border: string; ts: string; text: s
   warn: { border: "#F3B64B", ts: "#B08E4C", text: "#D8C79A" },
 };
 
-// モード選択の表示（file はリポジトリがある時だけ有効）
+// モード選択の表示（自律修正はリポジトリ＝ソースがある時だけ有効）
 const MODE_OPTIONS: { key: string; label: string; desc: string; needsRepo?: boolean }[] = [
-  { key: "advisory", label: "対策指針", desc: "外部サイト想定：ソース非開示。指針だけ提示（安定・安全）" },
-  { key: "propose", label: "修正案", desc: "自社アプリ想定：具体的な差分を提案（適用はしない）" },
-  { key: "file", label: "自律修正", desc: "ローカル：実ソースを書き換え、再攻撃で防御を証明", needsRepo: true },
+  { key: "advisory", label: "修正案", desc: "コードが分からないリポジトリ向け：侵入を実証し、修正案（対策方針）を提示する。状態は変えない" },
+  { key: "file", label: "自律修正", desc: "コードが分かるリポジトリ向け：実ソースを書き換え、再攻撃で防御を証明する", needsRepo: true },
 ];
 
 export default function Dashboard({
@@ -451,8 +451,8 @@ export default function Dashboard({
             >
               <Stat label="発見した脆弱性" value={String(stats.found)} color="#F2F5FA" mono />
               <Stat label="到達した深さ" value={stats.depth} color="#F3B64B" />
-              {mode === "propose" || mode === "advisory" ? (
-                <Stat label={mode === "advisory" ? "対策指針を提示" : "修正案を提示"} value={String(stats.proposed ?? 0)} color="#F3B64B" mono />
+              {mode === "advisory" || mode === "propose" ? (
+                <Stat label="修正案を提示" value={String(stats.proposed ?? 0)} color="#F3B64B" mono />
               ) : (
                 <Stat label="修復済み" value={String(stats.patched)} color="#5FD08F" mono />
               )}
@@ -752,56 +752,93 @@ function ReportBar({ report }: { report: Report }) {
         <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#F2F5FA" }}>診断レポート</h2>
         <span style={{ fontSize: 12, color: "#6B7A92", fontFamily: "var(--font-mono)" }}>
           発見 {report.found} ·{" "}
-          {report.mode === "advisory"
-            ? `対策指針 ${report.proposed ?? 0}`
-            : report.mode === "propose"
+          {report.mode === "advisory" || report.mode === "propose"
             ? `修正案 ${report.proposed ?? 0}`
             : `修復 ${report.patched}`}{" "}
           · 到達 {report.depth} · 抜いたレコード {report.records.toLocaleString()}
         </span>
       </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-        {report.findings.map((f) => {
-          const state = f.defended ? "defended" : f.breached ? "breached" : "safe";
-          const col =
-            state === "defended" ? "#5FD08F" : state === "breached" ? "#FF8198" : "#8392AC";
-          // 提案のみモードでは、突破された脆弱性は「修正案あり」（適用はしていない）
-          const tag =
-            state === "defended"
-              ? "修復済み"
-              : state === "breached"
-                ? f.proposed
-                  ? report.mode === "advisory"
-                    ? "指針あり"
-                    : "修正案あり"
-                  : "未修復"
-                : "影響なし";
-          const tagCol = state === "breached" && f.proposed ? "#F3B64B" : col;
-          return (
-            <div
-              key={f.vuln}
-              style={{
-                flex: "1 1 220px",
-                minWidth: 0,
-                border: "1px solid var(--line)",
-                borderRadius: 10,
-                padding: "12px 15px",
-                background: "#141A26",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: "#E7EDF6" }}>{f.name}</span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: tagCol, fontFamily: "var(--font-mono)" }}>{tag}</span>
-              </div>
-              <div style={{ fontSize: 11.5, color: "#6B7A92", marginTop: 5, lineHeight: 1.5 }}>
-                {f.location} · 重大度 {f.severity}
-              </div>
-              <div style={{ fontSize: 12, color: "#9FB0C8", marginTop: 6, lineHeight: 1.5 }}>対策: {f.fix}</div>
-            </div>
-          );
-        })}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {report.findings.map((f) => (
+          <FindingCard key={f.vuln} f={f} />
+        ))}
       </div>
     </section>
+  );
+}
+
+function FindingCard({ f }: { f: Finding }) {
+  const [open, setOpen] = useState(false);
+  const state = f.defended ? "defended" : f.breached ? "breached" : "safe";
+  const col = state === "defended" ? "#5FD08F" : state === "breached" ? "#FF8198" : "#8392AC";
+  const tag =
+    state === "defended" ? "修復済み" : state === "breached" ? (f.proposed ? "修正案あり" : "未修復") : "影響なし";
+  const tagCol = state === "breached" && f.proposed ? "#F3B64B" : col;
+  const hasDiff = !!(f.diff && f.diff.trim());
+  return (
+    <div
+      style={{
+        border: "1px solid var(--line)",
+        borderRadius: 10,
+        padding: "12px 15px",
+        background: "#141A26",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "#E7EDF6" }}>{f.name}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: tagCol, fontFamily: "var(--font-mono)" }}>{tag}</span>
+      </div>
+      <div style={{ fontSize: 11.5, color: "#6B7A92", marginTop: 5, lineHeight: 1.5 }}>
+        {f.location} · 重大度 {f.severity}
+        {f.source ? ` · 生成元: ${f.source}` : ""}
+      </div>
+      {/* Gemini が出した修正案／対策方針の本文 */}
+      {f.summary ? (
+        <div style={{ fontSize: 12.5, color: "#C2CDDE", marginTop: 7, lineHeight: 1.6 }}>{f.summary}</div>
+      ) : (
+        <div style={{ fontSize: 12, color: "#9FB0C8", marginTop: 6, lineHeight: 1.5 }}>対策: {f.fix}</div>
+      )}
+      {hasDiff && (
+        <>
+          <button
+            onClick={() => setOpen((v) => !v)}
+            style={{
+              marginTop: 9,
+              padding: "5px 11px",
+              borderRadius: 7,
+              background: "transparent",
+              border: "1px solid #2C3850",
+              color: "#9FE4F1",
+              fontSize: 11.5,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            {open ? "差分を隠す" : "差分を見る"}
+            {f.fixFile ? ` · ${f.fixFile}` : ""}
+          </button>
+          {open && (
+            <pre
+              style={{
+                margin: "9px 0 0",
+                padding: "12px 14px",
+                borderRadius: 8,
+                background: "#0A0E17",
+                color: "#C2CDDE",
+                fontFamily: "var(--font-mono)",
+                fontSize: 11.5,
+                lineHeight: 1.6,
+                overflowX: "auto",
+                whiteSpace: "pre",
+              }}
+            >
+              {renderDiff(f.diff!)}
+            </pre>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 

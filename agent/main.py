@@ -60,6 +60,7 @@ class Session:
     nodes: dict[str, dict] = field(default_factory=dict)
     edges: list[dict] = field(default_factory=list)
     mode: str = ""  # この診断で使う修正モード（file / propose / advisory / flag）。空なら既定。
+    details: dict = field(default_factory=dict)  # vuln -> 修正案/指針の詳細（レポート掲載用）
     stats: dict = field(default_factory=lambda: {"found": 0, "patched": 0, "records": 0, "depth": "—"})
 
     def emit(self, event: str, data: dict) -> None:
@@ -232,7 +233,7 @@ def _depth_label(sess: Session) -> str:
 HEAL_STEPS_FIX = [
     ("cause", "侵入経路を解析"),
     ("gen", "修正コードを生成"),
-    ("approve", "承認して適用"),
+    ("approve", "修正を適用"),
     ("reprove", "もう一度試して確認"),
 ]
 HEAL_STEPS_PROPOSE = [
@@ -341,51 +342,30 @@ async def run_loop(sess: Session) -> None:
                 sess.emit("stats", sess.stats)
                 _log(sess, "成功", f"{meta.name}で侵入成功 — {res.evidence}", "success")
 
-                # 自己修復：原因特定 → 修正生成
+                # 自己修復：原因特定 → 修正生成（全モード共通）
                 sess.emit("status", {"state": "fixing", "round": i, "maxRounds": max_rounds})
                 _emit_loop(sess, i, max_rounds, "cause", set(), patched_names, heal_steps)
                 _log(sess, "原因特定", f"突破された原因コードを特定中…")
                 plan = await generate_fix(vuln, res.evidence, black_box=black_box)
                 _emit_loop(sess, i, max_rounds, "gen", {"cause"}, patched_names, heal_steps)
                 _log(sess, "修復案", f"{plan.location} の修正案を生成（{plan.source}）")
+                # レポート用に詳細（要約・差分・生成元）を記録（全モード）
+                sess.details[vuln] = {**plan.to_dict(), "mode": fix_mode}
 
-                # 承認（人間の制御ポイント）
-                sess.emit("status", {"state": "awaiting_approval", "round": i, "maxRounds": max_rounds})
-                _emit_loop(sess, i, max_rounds, "approve", {"cause", "gen"}, patched_names, heal_steps)
-                sess.emit("approval", {
-                    "vuln": vuln, "name": plan.name, "file": plan.file,
-                    "location": plan.location, "summary": plan.summary,
-                    "diff": plan.diff, "source": plan.source, "mode": fix_mode,
-                })
-                if advisory_mode:
-                    _log(sess, "提案待ち", f"対策指針を提示しました（外部サイト想定・ソース非開示のため差分は出しません）: {plan.location}", "warn")
-                elif no_apply:
-                    _log(sess, "提案待ち", f"修正案を提示しました（公開版のため自動適用はしません）: {plan.location}", "warn")
-                else:
-                    _log(sess, "承認待ち", f"修正コードの適用には承認が必要です（{plan.location}）", "warn")
-
-                approved = await sess.wait_approval()
-
-                # 提示のみモード（propose / advisory）：適用も再攻撃もしない。原因と修正案の提示で完了。
+                # 提示のみモード（advisory / propose）：承認で止めず、提案を記録して次へ。
+                # 開始を押したら全脆弱性を探索し、最後にレポートとして一括提示する。
                 if no_apply:
-                    if approved:
-                        sess.stats["proposed"] = sess.stats.get("proposed", 0) + 1
-                        sess.emit("stats", sess.stats)
-                        if advisory_mode:
-                            _log(sess, "提案", f"{meta.name} の対策指針を確定。実装は運用側で実施", "success")
-                        else:
-                            _log(sess, "提案", f"{meta.name} の修正案を確定（{plan.file}）。適用は運用側で実施", "success")
-                    else:
-                        _log(sess, "提案", "この修正案は見送られました", "warn")
+                    sess.stats["proposed"] = sess.stats.get("proposed", 0) + 1
+                    sess.emit("stats", sess.stats)
+                    kind = "修正案"
+                    _log(sess, "提示", f"{meta.name} の{kind}を記録（{plan.source}）。レポートに掲載します", "success")
                     _emit_loop(sess, i, max_rounds, None, {"cause", "gen", "approve"}, patched_names, heal_steps)
                     continue
 
-                if not approved:
-                    _log(sess, "承認", "承認されず。この修正は適用しません", "warn")
-                    _emit_loop(sess, i, max_rounds, None, {"cause", "gen"}, patched_names, heal_steps)
-                    continue
+                # 自律修正モード（file / flag）：承認を待たず自動で適用 → 再証明 → 最後にレポート。
+                _emit_loop(sess, i, max_rounds, "approve", {"cause", "gen"}, patched_names, heal_steps)
 
-                # 適用（承認後に修正を反映）
+                # 適用（修正を反映）
                 if file_mode:
                     # agent がリポジトリの実ソースを直接書き換える（HMR で反映）
                     ok, where = sourcefix.apply_source_fix(vuln)
@@ -432,7 +412,7 @@ async def run_loop(sess: Session) -> None:
             sess.emit("stats", sess.stats)
             sess.emit("report", _build_report(sess, order, patched_names, no_apply, mode))
             if advisory_mode:
-                _log(sess, "完了", f"診断を完了。発見 {sess.stats['found']} 件 / 対策指針 {sess.stats.get('proposed', 0)} 件を提示（ソース非開示）", "success")
+                _log(sess, "完了", f"診断を完了。発見 {sess.stats['found']} 件 / 修正案 {sess.stats.get('proposed', 0)} 件を提示", "success")
             elif no_apply:
                 _log(sess, "完了", f"診断を完了。発見 {sess.stats['found']} 件 / 修正案 {sess.stats.get('proposed', 0)} 件を提示", "success")
             else:
@@ -453,6 +433,7 @@ def _build_report(sess: Session, order: list[VulnId], patched: list[str],
         meta = CATALOG[vid]
         node = sess.nodes.get(f"d_{vid}", {})
         breached = node.get("state") in ("breached", "defended")
+        d = sess.details.get(vid, {})
         findings.append({
             "vuln": vid, "name": meta.name, "severity": meta.severity,
             "location": meta.location, "fix": meta.fix,
@@ -460,6 +441,11 @@ def _build_report(sess: Session, order: list[VulnId], patched: list[str],
             "defended": node.get("state") == "defended",
             # 提案のみモードでは、見つかった脆弱性に修正案を提示した状態
             "proposed": bool(propose_mode and breached),
+            # レポートに掲載する詳細（要約・差分・生成元）。advisory では diff は空。
+            "summary": d.get("summary", ""),
+            "diff": d.get("diff", ""),
+            "source": d.get("source", ""),
+            "fixFile": d.get("file", ""),
         })
     return {
         "target": sess.target,
