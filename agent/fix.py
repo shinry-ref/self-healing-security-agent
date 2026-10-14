@@ -126,26 +126,31 @@ def _gemini_fix(vuln: VulnId, evidence: str, api_key: str | None, black_box: boo
     model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
     if black_box:
-        # ソース非開示：具体差分は出さず、CWE/OWASP に沿った一般的な修正指針だけ。
-        prompt = f"""あなたはセキュアコーディングの専門家です。許可を得て外部サイトを診断し、
-次の脆弱性を実証しました。**ソースコードは入手できません。** 具体的なファイル名や差分は
-推測で書かず、一般的で実装言語に依存しない修正指針だけを示してください。
+        # ソース非開示：具体差分は出さず、CWE/OWASP に沿った一般的な緩和策だけ。
+        # 防御目的の教育的な依頼として書く（攻撃指南に読めない表現にする）。
+        prompt = f"""あなたはセキュアコーディングの専門家です。セキュリティ診断で次の脆弱性クラスが
+確認されました。ソースコードは参照できない前提で、開発者が実装すべき一般的な緩和策を
+平易に説明してください（実装言語に依存しない防御の指針）。
 
-脆弱性: {p.name}（{vuln}） / {p.cwe} / {p.owasp}
-場所（機能面）: {p.location}
-攻撃のされ方: {p.attack_desc}
-実証の証拠: {evidence}
+脆弱性クラス: {p.name} / {p.cwe} / {p.owasp}
+対象の機能: {p.location}
+確認された事象の概要: {p.attack_desc}
 
-次の JSON だけを返す（前後に文章を付けない）:
-{{"summary": "ソースを見ずに実施できる一般的な修正指針を日本語2〜3文で"}}"""
-        resp = (
+出力は次の JSON だけ（前後に文章を付けない）:
+{{"summary": "開発者が実施すべき緩和策を日本語2〜3文で"}}"""
+        client = (
             genai.Client(vertexai=True, project=os.environ.get("GOOGLE_CLOUD_PROJECT"),
                          location=os.environ.get("GOOGLE_CLOUD_LOCATION", "asia-northeast1"))
             if _use_vertex() else genai.Client(api_key=api_key)
-        ).models.generate_content(model=model, contents=prompt)
-        text = (resp.text or "").strip()
+        )
+        resp = client.models.generate_content(model=model, contents=prompt)
+        # 安全フィルタでブロックされると resp.text 参照が例外を投げることがある → 保護
+        try:
+            text = (resp.text or "").strip()
+        except Exception:
+            text = ""
         if not text:
-            return None  # 応答なし → フォールバックへ
+            return None  # 応答なし/ブロック → フォールバックへ
         # advisory は要約1文だけでよい。JSON で返れば summary を採り、そうでなければ
         # 応答テキストそのものを指針として使う（Gemini 応答がありさえすれば指針にできる）。
         summary = _extract_summary(text)
