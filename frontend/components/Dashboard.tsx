@@ -253,7 +253,7 @@ export default function Dashboard({
           }}
         >
           <span
-            className={running ? "mamori-pulse" : undefined}
+            className={running ? "antibody-pulse" : undefined}
             style={{ width: 8, height: 8, borderRadius: "50%", background: tone.dot, boxShadow: `0 0 9px ${tone.dot}` }}
           />
           <span style={{ fontSize: 13, fontWeight: 600, color: tone.text }}>{STATUS_LABEL[status.state]}</span>
@@ -405,7 +405,7 @@ export default function Dashboard({
                   }}
                 >
                   <span
-                    className="mamori-pulse"
+                    className="antibody-pulse"
                     style={{ width: 6, height: 6, borderRadius: "50%", background: "#5FD08F", boxShadow: "0 0 6px #5FD08F" }}
                   />
                   実行中
@@ -413,7 +413,7 @@ export default function Dashboard({
               )}
             </div>
             <div
-              className="mamori-scroll"
+              className="antibody-scroll"
               style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 13, maxHeight: "46vh" }}
             >
               {logs.length === 0 && (
@@ -626,7 +626,7 @@ function LoopStepCell({ label, state, last }: { label: string; state: string; la
         viewBox="0 0 24 24"
         fill="none"
         aria-hidden="true"
-        className="mamori-pulse"
+        className="antibody-pulse"
         style={{ flex: "none" }}
       >
         <circle cx="12" cy="12" r="11" fill="#2A2108" stroke="#F3B64B" strokeWidth="1.6" />

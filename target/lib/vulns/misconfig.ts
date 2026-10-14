@@ -31,7 +31,7 @@ export function debugExposure(): DebugExposure {
       env: {
         NODE_ENV: process.env.NODE_ENV || "development",
         SESSION_SIGNING_KEY:
-          process.env.SESSION_SIGNING_KEY || "mamori-demo-signing-key-change-me",
+          process.env.SESSION_SIGNING_KEY || "antibody-demo-signing-key-change-me",
         DB_CONNECTION: "sqlite://:memory: (NEKO MART internal)",
       },
       users, // パスワード・カード番号を含む全ユーザー（ダミー）

@@ -114,7 +114,7 @@ async def _xss(client: httpx.AsyncClient, target: str) -> AttackResult:
     try:
         await client.post(
             target + "/api/products/1/reviews",
-            json={"author": "mamori-agent", "body": marker},
+            json={"author": "antibody-agent", "body": marker},
             timeout=10,
         )
         res = await client.get(target + "/api/products/1/reviews", timeout=10)

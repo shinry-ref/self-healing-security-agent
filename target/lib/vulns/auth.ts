@@ -9,16 +9,16 @@ import { isVulnerable } from "./registry";
 
 declare global {
   // eslint-disable-next-line no-var
-  var __mamoriTokenStore: Map<string, number> | undefined;
+  var __antibodyTokenStore: Map<string, number> | undefined;
 }
 
 function store(): Map<string, number> {
-  if (!globalThis.__mamoriTokenStore) globalThis.__mamoriTokenStore = new Map();
-  return globalThis.__mamoriTokenStore;
+  if (!globalThis.__antibodyTokenStore) globalThis.__antibodyTokenStore = new Map();
+  return globalThis.__antibodyTokenStore;
 }
 
 const SIGNING_KEY =
-  process.env.SESSION_SIGNING_KEY || "mamori-demo-signing-key-change-me";
+  process.env.SESSION_SIGNING_KEY || "antibody-demo-signing-key-change-me";
 
 function sign(raw: string): string {
   return createHmac("sha256", SIGNING_KEY).update(raw).digest("hex").slice(0, 32);

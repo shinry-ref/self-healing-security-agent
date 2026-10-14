@@ -31,14 +31,14 @@ SIGNING_KEY=$(openssl rand -hex 16)     # target のセッション署名鍵
 
 ```bash
 cd target
-gcloud run deploy mamori-target \
+gcloud run deploy antibody-target \
   --source . \
   --region "$REGION" \
   --allow-unauthenticated \
   --max-instances 1 \
   --set-env-vars "CONTROL_TOKEN=${CONTROL_TOKEN},SESSION_SIGNING_KEY=${SIGNING_KEY}"
 
-TARGET_URL=$(gcloud run services describe mamori-target --region "$REGION" --format='value(status.url)')
+TARGET_URL=$(gcloud run services describe antibody-target --region "$REGION" --format='value(status.url)')
 echo "TARGET_URL=$TARGET_URL"
 ```
 
@@ -51,13 +51,13 @@ echo "TARGET_URL=$TARGET_URL"
 
 ```bash
 cd ../agent
-gcloud run deploy mamori-agent \
+gcloud run deploy antibody-agent \
   --source . \
   --region "$REGION" \
   --allow-unauthenticated \
   --set-env-vars "ALLOWED_TARGETS=${TARGET_URL},CONTROL_TOKEN=${CONTROL_TOKEN}"
 
-AGENT_URL=$(gcloud run services describe mamori-agent --region "$REGION" --format='value(status.url)')
+AGENT_URL=$(gcloud run services describe antibody-agent --region "$REGION" --format='value(status.url)')
 echo "AGENT_URL=$AGENT_URL"
 ```
 
@@ -66,7 +66,7 @@ echo "AGENT_URL=$AGENT_URL"
 
 ```bash
 echo -n "<YOUR_GEMINI_API_KEY>" | gcloud secrets create gemini-api-key --data-file=-
-gcloud run services update mamori-agent --region "$REGION" \
+gcloud run services update antibody-agent --region "$REGION" \
   --update-secrets "GEMINI_API_KEY=gemini-api-key:latest" \
   --update-env-vars "GEMINI_MODEL=gemini-2.5-flash"
 ```
@@ -81,13 +81,13 @@ gcloud run services update mamori-agent --region "$REGION" \
 
 ```bash
 cd ../frontend
-gcloud run deploy mamori-frontend \
+gcloud run deploy antibody-frontend \
   --source . \
   --region "$REGION" \
   --allow-unauthenticated \
   --set-env-vars "AGENT_URL=${AGENT_URL},TARGET_URL=${TARGET_URL}"
 
-FRONTEND_URL=$(gcloud run services describe mamori-frontend --region "$REGION" --format='value(status.url)')
+FRONTEND_URL=$(gcloud run services describe antibody-frontend --region "$REGION" --format='value(status.url)')
 echo "ダッシュボード: $FRONTEND_URL"
 ```
 
@@ -98,7 +98,7 @@ echo "ダッシュボード: $FRONTEND_URL"
 ```bash
 # エージェントの健康診断（許可リストが見える）
 curl -s "$AGENT_URL/health"
-# → {"ok":true,"allowed":["https://mamori-target-xxxx.a.run.app"]}
+# → {"ok":true,"allowed":["https://antibody-target-xxxx.a.run.app"]}
 
 # 許可リスト外は 403 で弾かれる（安全装置の確認）
 curl -s -o /dev/null -w "%{http_code}\n" -X POST "$AGENT_URL/diagnose" \
@@ -117,7 +117,7 @@ curl -s -o /dev/null -w "%{http_code}\n" -X POST "$AGENT_URL/diagnose" \
 | target のインスタンス数 | **必ず `--max-instances 1`**。状態がメモリ内のため多重インスタンスでループが壊れる |
 | SSE のタイムアウト | Cloud Run の既定リクエストタイムアウトは 300 秒。診断は通常これに収まるが、延ばす場合は `--timeout 600` |
 | CORS | エージェントは `*` 許可済み（ダッシュボードから直接 SSE 購読するため） |
-| コスト | デモ後は `gcloud run services delete mamori-target mamori-agent mamori-frontend --region "$REGION"` で削除 |
+| コスト | デモ後は `gcloud run services delete antibody-target antibody-agent antibody-frontend --region "$REGION"` で削除 |
 | 再デモ | ダッシュボードの診断開始時に target を自動 reset（全脆弱性を再有効化・DB 再シード）するため、連続デモ可能 |
 
 ## トラブルシュート

@@ -6,7 +6,7 @@ import Database from "better-sqlite3";
 
 declare global {
   // eslint-disable-next-line no-var
-  var __mamoriDb: Database.Database | undefined;
+  var __antibodyDb: Database.Database | undefined;
 }
 
 function seed(db: Database.Database) {
@@ -88,13 +88,13 @@ function seed(db: Database.Database) {
 }
 
 export function getDb(): Database.Database {
-  if (!globalThis.__mamoriDb) {
+  if (!globalThis.__antibodyDb) {
     const db = new Database(":memory:");
     db.pragma("journal_mode = WAL");
     seed(db);
-    globalThis.__mamoriDb = db;
+    globalThis.__antibodyDb = db;
   }
-  return globalThis.__mamoriDb;
+  return globalThis.__antibodyDb;
 }
 
 /** DB を初期状態に戻す（デモのやり直し／reset 用）。 */

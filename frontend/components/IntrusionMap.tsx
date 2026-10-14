@@ -179,7 +179,7 @@ export default function IntrusionMap({ graph }: { graph: Graph }) {
               stroke={col.ring}
               strokeWidth={n.state === "active" ? 2.6 : 2.2}
               strokeDasharray={n.state === "unreached" ? "4 4" : undefined}
-              className={n.state === "active" ? "mamori-pulse" : undefined}
+              className={n.state === "active" ? "antibody-pulse" : undefined}
             />
             <circle cx={p.x} cy={p.y} r={r * 0.34} fill={col.core} />
             <text

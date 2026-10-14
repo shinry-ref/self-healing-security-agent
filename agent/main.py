@@ -31,7 +31,7 @@ from fix import generate_fix
 from recon import run_recon
 from vulns import ATTACK_ORDER, CATALOG, VulnId
 
-CONTROL_TOKEN = os.environ.get("CONTROL_TOKEN", "mamori-dev-control")
+CONTROL_TOKEN = os.environ.get("CONTROL_TOKEN", "antibody-dev-control")
 
 # 抜けるダミーレコードの目安件数（被害の大きさを数値で見せるため）。
 RECORDS: dict[VulnId, int] = {

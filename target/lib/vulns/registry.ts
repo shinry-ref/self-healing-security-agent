@@ -15,7 +15,7 @@ interface VulnState {
 // globalThis に載せる（本番 next start / Cloud Run 単一インスタンスでも同様）。
 declare global {
   // eslint-disable-next-line no-var
-  var __mamoriVulnState: VulnState | undefined;
+  var __antibodyVulnState: VulnState | undefined;
 }
 
 function randomSubset(seed: number): Set<VulnId> {
@@ -46,10 +46,10 @@ function freshState(): VulnState {
 }
 
 function state(): VulnState {
-  if (!globalThis.__mamoriVulnState) {
-    globalThis.__mamoriVulnState = freshState();
+  if (!globalThis.__antibodyVulnState) {
+    globalThis.__antibodyVulnState = freshState();
   }
-  return globalThis.__mamoriVulnState;
+  return globalThis.__antibodyVulnState;
 }
 
 /** その脆弱性が今まさに攻撃可能か（有効かつ未修正）。各脆弱版コードが分岐に使う。 */
@@ -74,9 +74,9 @@ export function unpatch(id: VulnId): void {
  */
 export function reset(seed?: number): VulnState {
   if (seed === undefined || seed === 0) {
-    globalThis.__mamoriVulnState = freshState();
+    globalThis.__antibodyVulnState = freshState();
   } else {
-    globalThis.__mamoriVulnState = {
+    globalThis.__antibodyVulnState = {
       enabled: randomSubset(seed),
       patched: new Set<VulnId>(),
       seed,
