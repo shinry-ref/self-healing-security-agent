@@ -30,6 +30,7 @@ from cve import match_candidates
 from fix import generate_fix
 from plugins import PLUGINS
 from recon import run_recon
+import sourcefix
 from vulns import ATTACK_ORDER, CATALOG, VulnId
 
 CONTROL_TOKEN = os.environ.get("CONTROL_TOKEN", "antibody-dev-control")
@@ -224,14 +225,19 @@ def _emit_loop(sess: Session, round_no: int, max_rounds: int, active: str | None
 async def run_loop(sess: Session) -> None:
     control = {"x-control-token": CONTROL_TOKEN}
     patched_names: list[str] = []
+    file_mode = sourcefix.enabled()  # 実ファイル修正モード（agent がリポジトリのソースを直接編集）
     try:
         async with httpx.AsyncClient() as client:
-            # 0) やられ役サイトを初期状態へ（全5種を有効化・DBを再シード）
+            # 0) やられ役サイトを初期状態へ（全種を有効化・DBを再シード）
             sess.emit("status", {"state": "recon", "round": 0, "maxRounds": 0})
             try:
                 await client.post(sess.target + "/api/control/reset", json={}, headers=control, timeout=10)
             except Exception:
                 _log(sess, "準備", "対象の初期化呼び出しに失敗（続行）", "warn")
+            if file_mode:
+                # 前回の実行で書き換えたソースを脆弱版へ戻しておく（やり直しのため）
+                sourcefix.restore_all()
+                _log(sess, "準備", "実ファイル修正モード：リポジトリのソースを直接編集します")
 
             # 1) 偵察
             _log(sess, "偵察", f"対象 {sess.target} の構成を調査中…")
@@ -314,19 +320,34 @@ async def run_loop(sess: Session) -> None:
                     _emit_loop(sess, i, max_rounds, None, {"cause", "gen"}, patched_names)
                     continue
 
-                # 適用（承認後にやられ役サイトへ反映）
-                _log(sess, "適用", f"{meta.name}の修正を適用しました")
-                try:
-                    await client.post(sess.target + "/api/control/patch",
-                                      json={"vuln": vuln}, headers=control, timeout=10)
-                except Exception:
-                    _log(sess, "適用", "修正の反映呼び出しに失敗", "warn")
+                # 適用（承認後に修正を反映）
+                if file_mode:
+                    # agent がリポジトリの実ソースを直接書き換える（HMR で反映）
+                    ok, where = sourcefix.apply_source_fix(vuln)
+                    if ok:
+                        _log(sess, "適用", f"{where} を実際に書き換えました（HMRで反映）", "success")
+                    else:
+                        _log(sess, "適用", f"実ファイルの書き換えに失敗（{where}）", "warn")
+                else:
+                    # フラグ切替モード：やられ役サイトのランタイム状態を切り替える
+                    _log(sess, "適用", f"{meta.name}の修正を適用しました")
+                    try:
+                        await client.post(sess.target + "/api/control/patch",
+                                          json={"vuln": vuln}, headers=control, timeout=10)
+                    except Exception:
+                        _log(sess, "適用", "修正の反映呼び出しに失敗", "warn")
 
-                # 再攻撃で防御証明
+                # 再攻撃で防御証明（file_mode では HMR の反映を少し待ちながら再試行）
                 sess.emit("status", {"state": "reproving", "round": i, "maxRounds": max_rounds})
                 _emit_loop(sess, i, max_rounds, "reprove", {"cause", "gen", "approve"}, patched_names)
                 _log(sess, "再チェック", "同じ攻撃をもう一度実行して確認…", "active")
                 res2 = await attack(client, sess.target, vuln)
+                if file_mode:
+                    for _ in range(8):
+                        if not res2.success:
+                            break
+                        await asyncio.sleep(1.5)  # next dev の再コンパイル待ち
+                        res2 = await attack(client, sess.target, vuln)
                 if not res2.success:
                     _set_node(sess, s_id, "defended")
                     _set_node(sess, d_id, "defended")
