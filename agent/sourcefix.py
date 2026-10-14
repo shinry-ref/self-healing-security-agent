@@ -105,6 +105,21 @@ PATCHES: dict[str, dict] = {
 
 import os  # noqa: E402
 
+import manifest  # noqa: E402
+
+
+def _patch(vuln: str) -> dict | None:
+    """書換定義 {file, find, replace}。対象リポジトリの antibody.config.json に
+    sourceMap があればそれを優先し、無ければ内蔵デフォルト（PATCHES）を使う。"""
+    return manifest.source_patch(vuln) or PATCHES.get(vuln)
+
+
+def _patched_vulns() -> list[str]:
+    """書換対象の脆弱性 id 一覧（内蔵 ＋ マニフェストの sourceMap）。"""
+    ids = set(PATCHES.keys())
+    ids |= {v for v in PATCHES if manifest.source_patch(v)}
+    return list(ids)
+
 
 def _repo() -> str:
     """target リポジトリのパス（環境変数 TARGET_REPO）。空なら実ファイル編集は無効。"""
@@ -124,7 +139,7 @@ def repo_available() -> bool:
 
 def apply_source_fix(vuln: str) -> tuple[bool, str]:
     """脆弱モジュールの実ソースを安全版へ書き換える。(成功, 対象ファイル or 理由)。"""
-    repo, p = _repo(), PATCHES.get(vuln)
+    repo, p = _repo(), _patch(vuln)
     if not repo or not p:
         return False, "TARGET_REPO 未設定または対象外"
     path = os.path.join(repo, p["file"])
@@ -141,7 +156,7 @@ def apply_source_fix(vuln: str) -> tuple[bool, str]:
 
 def restore_source(vuln: str) -> None:
     """安全版へ書き換えたソースを脆弱版へ戻す（デモのやり直し用）。"""
-    repo, p = _repo(), PATCHES.get(vuln)
+    repo, p = _repo(), _patch(vuln)
     if not repo or not p:
         return
     path = os.path.join(repo, p["file"])
@@ -154,5 +169,5 @@ def restore_source(vuln: str) -> None:
 
 
 def restore_all() -> None:
-    for v in PATCHES:
+    for v in _patched_vulns():
         restore_source(v)

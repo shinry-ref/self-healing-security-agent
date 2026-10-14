@@ -1,0 +1,62 @@
+{
+  "name": "NEKO MART (diagnostic demo)",
+  "description": "アンチボディが検査する対象アプリの設定。別アプリに向けるときは endpoints と sourceMap を差し替える。",
+  "endpoints": {
+    "sqli": "/api/login",
+    "auth": "/api/me",
+    "misconfig": "/api/debug",
+    "access": "/api/orders/1002",
+    "xss": "/api/products/1/reviews",
+    "pathtraversal": "/api/files",
+    "cmdi": "/api/net-tool",
+    "jwt": "/api/session",
+    "ssrf": "/api/fetch"
+  },
+  "sourceMap": {
+    "sqli": {
+      "file": "lib/vulns/sqli.ts",
+      "find": "    const sql = `SELECT * FROM users WHERE username='${username}' AND password='${password}'`;\n    try {\n      const user = db.prepare(sql).get() as UserRow | undefined;",
+      "replace": "    const sql = \"SELECT * FROM users WHERE username = ? AND password = ?\";\n    try {\n      const user = db.prepare(sql).get(username, password) as UserRow | undefined;"
+    },
+    "auth": {
+      "file": "lib/vulns/auth.ts",
+      "find": "    const m = /^user-(\\d+)$/.exec(token);\n    if (m) return Number(m[1]);",
+      "replace": "    const m = /^user-(\\d+)$/.exec(token);\n    if (m) return null;"
+    },
+    "jwt": {
+      "file": "lib/vulns/jwt.ts",
+      "find": "    if ((header.alg || \"\").toLowerCase() === \"none\") {\n      return { ok: true, claims };",
+      "replace": "    if ((header.alg || \"\").toLowerCase() === \"none\") {\n      return { ok: false, reason: \"alg=none is not allowed\" };"
+    },
+    "access": {
+      "file": "lib/vulns/access.ts",
+      "find": "  if (isVulnerable(\"access\")) {\n    return true;",
+      "replace": "  if (isVulnerable(\"access\")) {\n    if (info.requesterUserId === null) return false;\n    if (info.requesterRole === \"admin\") return true;\n    return info.orderUserId === info.requesterUserId;"
+    },
+    "ssrf": {
+      "file": "lib/vulns/ssrf.ts",
+      "find": "    if (INTERNAL_RESPONSES[host]) {\n      return { ok: true, status: 200, body: INTERNAL_RESPONSES[host] };",
+      "replace": "    if (isInternalHost(host)) {\n      return { ok: false, status: 403, reason: \"blocked internal host\" };"
+    },
+    "pathtraversal": {
+      "file": "lib/vulns/pathtraversal.ts",
+      "find": "    const path = resolveUnsafe(name);",
+      "replace": "    const path = PUBLIC_DIR + (name.split(/[\\\\/]/).pop() || \"\");"
+    },
+    "cmdi": {
+      "file": "lib/vulns/cmdi.ts",
+      "find": "    const parts = host.split(/\\s*(?:;|&&|\\|\\||\\||&)\\s*/).filter(Boolean);",
+      "replace": "    if (SHELL_META.test(host)) return { ok: false, output: \"invalid host\", injected: false };\n    const parts = [host];"
+    },
+    "misconfig": {
+      "file": "lib/vulns/misconfig.ts",
+      "find": "  if (!isVulnerable(\"misconfig\")) {",
+      "replace": "  if (!isVulnerable(\"misconfig\") || true) {"
+    },
+    "xss": {
+      "file": "lib/vulns/xss.ts",
+      "find": "  if (isVulnerable(\"xss\")) {\n    return body;",
+      "replace": "  if (isVulnerable(\"xss\")) {\n    return escapeHtml(body);"
+    }
+  }
+}
