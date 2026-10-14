@@ -203,7 +203,7 @@ export default function Dashboard({
               flex: "none",
             }}
           >
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" role="img" aria-label="まもりのロゴ">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" role="img" aria-label="アンチボディのロゴ">
               <circle cx="6" cy="7" r="2.3" fill="#5ED1E6" />
               <circle cx="18" cy="6" r="2.3" fill="#3A5A7A" />
               <circle cx="17" cy="18" r="2.3" fill="#3A5A7A" />
@@ -212,7 +212,7 @@ export default function Dashboard({
             </svg>
           </div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: ".2px", color: "#F2F5FA" }}>まもり</div>
+            <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: ".2px", color: "#F2F5FA" }}>アンチボディ</div>
             <div style={{ fontSize: 12, color: "#6B7A92" }}>脆弱性の自動診断ツール</div>
           </div>
         </div>

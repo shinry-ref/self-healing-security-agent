@@ -42,7 +42,7 @@ RECORDS: dict[VulnId, int] = {
     "xss": 2,        # レビュー
 }
 
-app = FastAPI(title="まもり エージェント")
+app = FastAPI(title="アンチボディ エージェント")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # ダッシュボードから直接 SSE 購読できるように

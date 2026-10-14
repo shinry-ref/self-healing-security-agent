@@ -1,4 +1,4 @@
-# まもり（Mamori）— 自己修復型・侵入実証エージェント
+# アンチボディ（Antibody）— 自己修復型・侵入実証エージェント
 
 > 第5回 Agentic AI Hackathon 提出作品
 

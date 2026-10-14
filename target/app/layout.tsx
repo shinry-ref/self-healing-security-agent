@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "NEKO MART（診断デモ用・脆弱サイト）",
-  description: "まもり の診断対象となる、わざと脆弱にした猫グッズECサイト",
+  description: "アンチボディ の診断対象となる、わざと脆弱にした猫グッズECサイト",
 };
 
 export default function RootLayout({
@@ -15,7 +15,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-zinc-50 text-zinc-900 antialiased">
         {/* 合法性の明示: この対象がデモ用のやられ役サイトであることを全画面で告知 */}
         <div className="w-full bg-amber-500 px-4 py-1.5 text-center text-xs font-medium text-amber-950">
-          ⚠️ これは「まもり」の診断対象として、わざと脆弱に作られたデモ用サイトです。実在の店舗・個人情報ではありません。
+          ⚠️ これは「アンチボディ」の診断対象として、わざと脆弱に作られたデモ用サイトです。実在の店舗・個人情報ではありません。
         </div>
         <header className="border-b border-zinc-200 bg-white">
           <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
