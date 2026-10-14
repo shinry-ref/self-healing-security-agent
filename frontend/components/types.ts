@@ -82,7 +82,7 @@ export interface Approval {
   summary: string;
   diff: string;
   source: string;
-  mode?: string; // "propose" | "file" | "flag"
+  mode?: string; // "file" | "propose" | "advisory" | "flag"
 }
 
 export interface Finding {
@@ -98,7 +98,7 @@ export interface Finding {
 
 export interface Report {
   target: string;
-  mode?: string; // "propose" | "apply"
+  mode?: string; // "file" | "propose" | "advisory" | "flag"（後方互換で "apply" も）
   found: number;
   patched: number;
   proposed?: number;

@@ -48,6 +48,13 @@ const LOG_ACCENT: Record<LogLine["level"], { border: string; ts: string; text: s
   warn: { border: "#F3B64B", ts: "#B08E4C", text: "#D8C79A" },
 };
 
+// モード選択の表示（file はリポジトリがある時だけ有効）
+const MODE_OPTIONS: { key: string; label: string; desc: string; needsRepo?: boolean }[] = [
+  { key: "advisory", label: "対策指針", desc: "外部サイト想定：ソース非開示。指針だけ提示（安定・安全）" },
+  { key: "propose", label: "修正案", desc: "自社アプリ想定：具体的な差分を提案（適用はしない）" },
+  { key: "file", label: "自律修正", desc: "ローカル：実ソースを書き換え、再攻撃で防御を証明", needsRepo: true },
+];
+
 export default function Dashboard({
   agentUrl,
   defaultTarget,
@@ -65,8 +72,11 @@ export default function Dashboard({
   const [loop, setLoop] = useState<LoopState | null>(null);
   const [approval, setApproval] = useState<Approval | null>(null);
   const [report, setReport] = useState<Report | null>(null);
-  // 修正の適用方式: propose=提案のみ（公開版） / apply=実際に直す（file・flag）
-  const [mode, setMode] = useState<string>("apply");
+  // 進行中の実モード（サーバーが決定）: file / propose / advisory / flag
+  const [mode, setMode] = useState<string>("advisory");
+  // ユーザーが選ぶモード（診断開始時にサーバーへ送る）
+  const [selectedMode, setSelectedMode] = useState<string>("advisory");
+  const [repoAvailable, setRepoAvailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDiff, setShowDiff] = useState(false);
   const [approving, setApproving] = useState(false);
@@ -79,6 +89,19 @@ export default function Dashboard({
   }, [logs]);
 
   useEffect(() => () => esRef.current?.close(), []);
+
+  // サーバー設定を取得：リポジトリがあるか（＝file モードを選べるか）と既定モード
+  useEffect(() => {
+    fetch(`${AGENT_URL}/config`)
+      .then((r) => r.json())
+      .then((c) => {
+        setRepoAvailable(!!c.repoAvailable);
+        if (c.mode) setSelectedMode(c.mode);
+      })
+      .catch(() => {
+        /* 取得失敗時は既定（advisory）のまま */
+      });
+  }, [AGENT_URL]);
 
   const nowTs = () => {
     const d = new Date();
@@ -94,7 +117,7 @@ export default function Dashboard({
     setLoop(null);
     setApproval(null);
     setReport(null);
-    setMode("apply");
+    setMode(selectedMode);
     setError(null);
     setShowDiff(false);
 
@@ -103,7 +126,7 @@ export default function Dashboard({
       const res = await fetch(`${AGENT_URL}/diagnose`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ target }),
+        body: JSON.stringify({ target, mode: selectedMode }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -131,7 +154,7 @@ export default function Dashboard({
     es.addEventListener("approval", (ev) => {
       const a = JSON.parse((ev as MessageEvent).data) as Approval;
       setApproval(a);
-      if (a.mode) setMode(a.mode === "propose" ? "propose" : "apply");
+      if (a.mode) setMode(a.mode);
       setShowDiff(false);
     });
     es.addEventListener("report", (ev) => {
@@ -152,7 +175,7 @@ export default function Dashboard({
     });
     // 診断完了。サーバーがストリームを閉じる前に end で明示的に購読を止め、再接続を防ぐ。
     es.addEventListener("end", () => es.close());
-  }, [target, AGENT_URL]);
+  }, [target, AGENT_URL, selectedMode]);
 
   const decide = useCallback(
     async (approved: boolean) => {
@@ -247,6 +270,40 @@ export default function Dashboard({
             }}
           />
         </label>
+
+        {/* モード切替：ローカルは自律修正、公開は対策指針/修正案 */}
+        <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+          <span style={{ fontSize: 12, color: "#6B7A92", whiteSpace: "nowrap" }}>モード</span>
+          <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: "1px solid #2C3850" }}>
+            {MODE_OPTIONS.map((m) => {
+              const disabled = running || (m.needsRepo && !repoAvailable);
+              const active = selectedMode === m.key;
+              return (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => !disabled && setSelectedMode(m.key)}
+                  disabled={disabled}
+                  title={m.needsRepo && !repoAvailable ? `${m.desc}（この環境ではリポジトリ未接続のため選べません）` : m.desc}
+                  style={{
+                    padding: "7px 12px",
+                    fontSize: 12,
+                    fontWeight: active ? 700 : 500,
+                    fontFamily: "inherit",
+                    background: active ? "#1C3350" : "#0E131E",
+                    color: disabled && !active ? "#44506A" : active ? "#9FE4F1" : "#8392AC",
+                    border: "none",
+                    borderLeft: m.key !== MODE_OPTIONS[0].key ? "1px solid #2C3850" : "none",
+                    cursor: disabled ? "default" : "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {m.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         <div style={{ flex: 1 }} />
 
@@ -394,8 +451,8 @@ export default function Dashboard({
             >
               <Stat label="発見した脆弱性" value={String(stats.found)} color="#F2F5FA" mono />
               <Stat label="到達した深さ" value={stats.depth} color="#F3B64B" />
-              {mode === "propose" ? (
-                <Stat label="修正案を提示" value={String(stats.proposed ?? 0)} color="#F3B64B" mono />
+              {mode === "propose" || mode === "advisory" ? (
+                <Stat label={mode === "advisory" ? "対策指針を提示" : "修正案を提示"} value={String(stats.proposed ?? 0)} color="#F3B64B" mono />
               ) : (
                 <Stat label="修復済み" value={String(stats.patched)} color="#5FD08F" mono />
               )}
@@ -517,7 +574,9 @@ export default function Dashboard({
               </svg>
               <div style={{ flex: "1 1 300px", minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: "#F2F5FA" }}>
-                  {approval.mode === "propose"
+                  {approval.mode === "advisory"
+                    ? `${approval.name}の対策指針です（外部サイト想定・ソース非開示のため差分なし）`
+                    : approval.mode === "propose"
                     ? `${approval.name}の修正案です（この公開版では自動適用しません）`
                     : `${approval.name}の修正コードの適用には承認が必要です`}
                 </div>
@@ -527,22 +586,24 @@ export default function Dashboard({
                 </div>
               </div>
               <div style={{ display: "flex", gap: 11 }}>
-                <button
-                  onClick={() => setShowDiff((v) => !v)}
-                  style={{
-                    padding: "11px 19px",
-                    borderRadius: 8,
-                    background: "transparent",
-                    border: "1px solid #2C3850",
-                    color: "#C2CDDE",
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                  }}
-                >
-                  {showDiff ? "差分を隠す" : "差分を見る"}
-                </button>
+                {approval.diff ? (
+                  <button
+                    onClick={() => setShowDiff((v) => !v)}
+                    style={{
+                      padding: "11px 19px",
+                      borderRadius: 8,
+                      background: "transparent",
+                      border: "1px solid #2C3850",
+                      color: "#C2CDDE",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    {showDiff ? "差分を隠す" : "差分を見る"}
+                  </button>
+                ) : null}
                 <button
                   onClick={() => decide(false)}
                   disabled={approving}
@@ -576,11 +637,17 @@ export default function Dashboard({
                     opacity: approving ? 0.6 : 1,
                   }}
                 >
-                  {approving ? "送信中…" : approval.mode === "propose" ? "修正案を確定" : "承認して適用"}
+                  {approving
+                    ? "送信中…"
+                    : approval.mode === "advisory"
+                    ? "対策指針を確定"
+                    : approval.mode === "propose"
+                    ? "修正案を確定"
+                    : "承認して適用"}
                 </button>
               </div>
             </div>
-            {showDiff && (
+            {showDiff && approval.diff && (
               <pre
                 style={{
                   margin: 0,
@@ -685,7 +752,9 @@ function ReportBar({ report }: { report: Report }) {
         <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#F2F5FA" }}>診断レポート</h2>
         <span style={{ fontSize: 12, color: "#6B7A92", fontFamily: "var(--font-mono)" }}>
           発見 {report.found} ·{" "}
-          {report.mode === "propose"
+          {report.mode === "advisory"
+            ? `対策指針 ${report.proposed ?? 0}`
+            : report.mode === "propose"
             ? `修正案 ${report.proposed ?? 0}`
             : `修復 ${report.patched}`}{" "}
           · 到達 {report.depth} · 抜いたレコード {report.records.toLocaleString()}
@@ -702,7 +771,9 @@ function ReportBar({ report }: { report: Report }) {
               ? "修復済み"
               : state === "breached"
                 ? f.proposed
-                  ? "修正案あり"
+                  ? report.mode === "advisory"
+                    ? "指針あり"
+                    : "修正案あり"
                   : "未修復"
                 : "影響なし";
           const tagCol = state === "breached" && f.proposed ? "#F3B64B" : col;

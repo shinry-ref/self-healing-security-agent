@@ -116,6 +116,12 @@ def enabled() -> bool:
     return os.environ.get("FIX_MODE") == "file" and bool(_repo())
 
 
+def repo_available() -> bool:
+    """リポジトリのソース編集が物理的に可能か（TARGET_REPO 設定済み）。FIX_MODE に依存しない。
+    ランタイムでモードを file に切り替えてよいかの判定に使う。"""
+    return bool(_repo())
+
+
 def apply_source_fix(vuln: str) -> tuple[bool, str]:
     """脆弱モジュールの実ソースを安全版へ書き換える。(成功, 対象ファイル or 理由)。"""
     repo, p = _repo(), PATCHES.get(vuln)

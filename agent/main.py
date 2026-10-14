@@ -59,6 +59,7 @@ class Session:
     approval_result: bool = True
     nodes: dict[str, dict] = field(default_factory=dict)
     edges: list[dict] = field(default_factory=list)
+    mode: str = ""  # この診断で使う修正モード（file / propose / advisory / flag）。空なら既定。
     stats: dict = field(default_factory=lambda: {"found": 0, "patched": 0, "records": 0, "depth": "—"})
 
     def emit(self, event: str, data: dict) -> None:
@@ -78,6 +79,22 @@ SESSIONS: dict[str, Session] = {}
 
 class DiagnoseReq(BaseModel):
     target: str | None = None
+    mode: str | None = None  # file / propose / advisory / flag。未指定なら FIX_MODE 既定。
+
+
+# 選べる修正モード。file は TARGET_REPO がある時だけ有効。
+VALID_MODES = ("file", "propose", "advisory", "flag")
+
+
+def _resolve_mode(requested: str | None) -> str:
+    """要求モードを検証し、使えないものは安全側（advisory）へ寄せる。"""
+    m = (requested or FIX_MODE or "advisory").strip().lower()
+    if m not in VALID_MODES:
+        m = "advisory"
+    # ソース（リポジトリ）が無ければ実ファイル修正はできない → 提示のみへ縮退。
+    if m == "file" and not sourcefix.repo_available():
+        m = "advisory"
+    return m
 
 
 class ApproveReq(BaseModel):
@@ -97,9 +114,16 @@ async def health() -> dict:
 
 @app.get("/config")
 async def config() -> dict:
-    """フロントが対象欄の初期値・選択肢に使う（許可リストのみ公開）。"""
+    """フロントが対象欄の初期値・選択肢・モード切替に使う（許可リストのみ公開）。"""
     allowed = allowed_targets()
-    return {"targets": allowed, "default": _default_target()}
+    repo = sourcefix.repo_available()
+    return {
+        "targets": allowed,
+        "default": _default_target(),
+        "mode": _resolve_mode(None),      # サーバー既定（FIX_MODE から解決）
+        "repoAvailable": repo,            # false のとき file モードは選べない
+        "modes": list(VALID_MODES),
+    }
 
 
 @app.post("/diagnose")
@@ -111,11 +135,12 @@ async def diagnose(req: DiagnoseReq) -> dict:
             status_code=403,
             detail="このツールは許可されたやられ役サイトしか診断できません",
         )
+    mode = _resolve_mode(req.mode)
     sid = uuid.uuid4().hex[:12]
-    sess = Session(target=target)
+    sess = Session(target=target, mode=mode)
     SESSIONS[sid] = sess
     asyncio.create_task(run_loop(sess))
-    return {"id": sid, "target": target}
+    return {"id": sid, "target": target, "mode": mode}
 
 
 @app.get("/stream/{sid}")
@@ -239,10 +264,13 @@ async def run_loop(sess: Session) -> None:
     #   propose（既定・公開版）: 修正案を提示するだけ。適用も再攻撃もしない（状態を変えない）
     #   file: agent がリポジトリの実ソースを書き換え、HMR で反映して再攻撃で防御証明
     #   flag: やられ役サイトのランタイム状態を control/patch で切替
-    file_mode = sourcefix.enabled()
-    fix_mode = FIX_MODE if not file_mode else "file"
-    propose_mode = fix_mode == "propose"
-    heal_steps = HEAL_STEPS_PROPOSE if propose_mode else HEAL_STEPS_FIX
+    mode = _resolve_mode(sess.mode)
+    file_mode = mode == "file"            # agent が実ソースを書き換える（ローカル・自律修正）
+    advisory_mode = mode == "advisory"    # 外部サイト想定：指針だけ、差分は出さない
+    no_apply = mode in ("propose", "advisory")  # 提示のみ（適用も再攻撃もしない）
+    black_box = advisory_mode             # 具体差分を出さず一般的な指針で生成
+    fix_mode = mode
+    heal_steps = HEAL_STEPS_PROPOSE if no_apply else HEAL_STEPS_FIX
     try:
         async with httpx.AsyncClient() as client:
             # 0) やられ役サイトを初期状態へ（全種を有効化・DBを再シード）
@@ -317,7 +345,7 @@ async def run_loop(sess: Session) -> None:
                 sess.emit("status", {"state": "fixing", "round": i, "maxRounds": max_rounds})
                 _emit_loop(sess, i, max_rounds, "cause", set(), patched_names, heal_steps)
                 _log(sess, "原因特定", f"突破された原因コードを特定中…")
-                plan = await generate_fix(vuln, res.evidence)
+                plan = await generate_fix(vuln, res.evidence, black_box=black_box)
                 _emit_loop(sess, i, max_rounds, "gen", {"cause"}, patched_names, heal_steps)
                 _log(sess, "修復案", f"{plan.location} の修正案を生成（{plan.source}）")
 
@@ -329,19 +357,24 @@ async def run_loop(sess: Session) -> None:
                     "location": plan.location, "summary": plan.summary,
                     "diff": plan.diff, "source": plan.source, "mode": fix_mode,
                 })
-                if propose_mode:
+                if advisory_mode:
+                    _log(sess, "提案待ち", f"対策指針を提示しました（外部サイト想定・ソース非開示のため差分は出しません）: {plan.location}", "warn")
+                elif no_apply:
                     _log(sess, "提案待ち", f"修正案を提示しました（公開版のため自動適用はしません）: {plan.location}", "warn")
                 else:
                     _log(sess, "承認待ち", f"修正コードの適用には承認が必要です（{plan.location}）", "warn")
 
                 approved = await sess.wait_approval()
 
-                # 提案のみモード（公開版）：適用も再攻撃もしない。原因と修正案の提示で完了。
-                if propose_mode:
+                # 提示のみモード（propose / advisory）：適用も再攻撃もしない。原因と修正案の提示で完了。
+                if no_apply:
                     if approved:
                         sess.stats["proposed"] = sess.stats.get("proposed", 0) + 1
                         sess.emit("stats", sess.stats)
-                        _log(sess, "提案", f"{meta.name} の修正案を確定（{plan.file}）。適用は運用側で実施", "success")
+                        if advisory_mode:
+                            _log(sess, "提案", f"{meta.name} の対策指針を確定。実装は運用側で実施", "success")
+                        else:
+                            _log(sess, "提案", f"{meta.name} の修正案を確定（{plan.file}）。適用は運用側で実施", "success")
                     else:
                         _log(sess, "提案", "この修正案は見送られました", "warn")
                     _emit_loop(sess, i, max_rounds, None, {"cause", "gen", "approve"}, patched_names, heal_steps)
@@ -397,8 +430,10 @@ async def run_loop(sess: Session) -> None:
             # 4) 完了・レポート（report → status:done の順。done で接続を閉じる前に届かせる）
             sess.stats["depth"] = _depth_label(sess)
             sess.emit("stats", sess.stats)
-            sess.emit("report", _build_report(sess, order, patched_names, propose_mode))
-            if propose_mode:
+            sess.emit("report", _build_report(sess, order, patched_names, no_apply, mode))
+            if advisory_mode:
+                _log(sess, "完了", f"診断を完了。発見 {sess.stats['found']} 件 / 対策指針 {sess.stats.get('proposed', 0)} 件を提示（ソース非開示）", "success")
+            elif no_apply:
                 _log(sess, "完了", f"診断を完了。発見 {sess.stats['found']} 件 / 修正案 {sess.stats.get('proposed', 0)} 件を提示", "success")
             else:
                 _log(sess, "完了", f"診断を完了。発見 {sess.stats['found']} 件 / 修復 {sess.stats['patched']} 件", "success")
@@ -412,7 +447,7 @@ async def run_loop(sess: Session) -> None:
 
 
 def _build_report(sess: Session, order: list[VulnId], patched: list[str],
-                  propose_mode: bool = False) -> dict:
+                  propose_mode: bool = False, mode: str = "") -> dict:
     findings = []
     for vid in order:
         meta = CATALOG[vid]
@@ -428,7 +463,8 @@ def _build_report(sess: Session, order: list[VulnId], patched: list[str],
         })
     return {
         "target": sess.target,
-        "mode": "propose" if propose_mode else "apply",
+        # 具体モード（file / propose / advisory / flag）。後方互換で propose/apply も解釈可能。
+        "mode": mode or ("propose" if propose_mode else "apply"),
         "found": sess.stats["found"],
         "patched": sess.stats["patched"],
         "proposed": sess.stats.get("proposed", 0),

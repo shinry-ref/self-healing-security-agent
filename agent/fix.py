@@ -42,35 +42,97 @@ def _fallback(vuln: VulnId) -> FixPlan:
     )
 
 
+def _advisory_text(vuln: VulnId) -> str:
+    """ソース非開示の相手向けの一般的な修正指針（具体差分を出さない）。"""
+    p = PLUGINS[vuln]
+    return (
+        f"{p.fix_desc}。該当は {p.cwe} / {p.owasp}。"
+        f"ソースコードを確認できないため具体的な差分は提示できません。"
+        f"該当機能（{p.location}）に上記の対策を実装してください。"
+    )
+
+
+def _advisory_fallback(vuln: VulnId) -> FixPlan:
+    """ブラックボックス（外部サイト・ソース無し）向けの修正指針。ファイル名や差分は出さない。"""
+    p = PLUGINS[vuln]
+    return FixPlan(
+        vuln=vuln,
+        name=p.name,
+        file="（ソース非開示のため特定不可）",
+        location=p.location,
+        summary=_advisory_text(vuln),
+        diff="",  # 差分は出さない（コードが見えないため）
+        source="フォールバック",
+    )
+
+
 def _use_vertex() -> bool:
     """Vertex AI モード（Cloud Run ではサービスアカウント認証＝鍵レス）を使うか。"""
     v = os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").strip().lower()
     return v in ("1", "true", "yes")
 
 
-async def generate_fix(vuln: VulnId, evidence: str) -> FixPlan:
-    """突破された脆弱性の修正案を生成する。Gemini が使えればそれで、だめなら実コード対応の確実な差分で。"""
+async def generate_fix(vuln: VulnId, evidence: str, black_box: bool = False) -> FixPlan:
+    """突破された脆弱性の修正案を生成する。Gemini が使えればそれで、だめなら確実なフォールバックで。
+
+    black_box=True（外部サイト・ソース非開示）のときは、具体的な差分ではなく
+    一般的な修正指針だけを返す（コードが見えない相手に file:line 差分を出さない）。
+    """
+    fb = _advisory_fallback if black_box else _fallback
     api_key = os.environ.get("GEMINI_API_KEY")
     # Vertex AI は鍵不要（ADC）。AI Studio は GEMINI_API_KEY が要る。どちらも無ければフォールバック。
     if not _use_vertex() and not api_key:
-        return _fallback(vuln)
+        return fb(vuln)
     try:
         plan = await asyncio.wait_for(
-            asyncio.to_thread(_gemini_fix, vuln, evidence, api_key), timeout=25
+            asyncio.to_thread(_gemini_fix, vuln, evidence, api_key, black_box), timeout=25
         )
-        return plan or _fallback(vuln)
+        return plan or fb(vuln)
     except Exception:
         # 鍵切れ・レート制限・ネットワーク断などでもデモは止めない
-        return _fallback(vuln)
+        return fb(vuln)
 
 
-def _gemini_fix(vuln: VulnId, evidence: str, api_key: str | None) -> FixPlan | None:
+def _gemini_fix(vuln: VulnId, evidence: str, api_key: str | None, black_box: bool = False) -> FixPlan | None:
     """Gemini に原因と安全な修正を JSON で答えさせる。失敗時は None（フォールバックへ）。"""
     from google import genai  # 遅延 import（鍵が無い環境を壊さない）
 
     p = PLUGINS[vuln]
     base = p.fix
     model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+
+    if black_box:
+        # ソース非開示：具体差分は出さず、CWE/OWASP に沿った一般的な修正指針だけ。
+        prompt = f"""あなたはセキュアコーディングの専門家です。許可を得て外部サイトを診断し、
+次の脆弱性を実証しました。**ソースコードは入手できません。** 具体的なファイル名や差分は
+推測で書かず、一般的で実装言語に依存しない修正指針だけを示してください。
+
+脆弱性: {p.name}（{vuln}） / {p.cwe} / {p.owasp}
+場所（機能面）: {p.location}
+攻撃のされ方: {p.attack_desc}
+実証の証拠: {evidence}
+
+次の JSON だけを返す（前後に文章を付けない）:
+{{"summary": "ソースを見ずに実施できる一般的な修正指針を日本語2〜3文で"}}"""
+        resp = (
+            genai.Client(vertexai=True, project=os.environ.get("GOOGLE_CLOUD_PROJECT"),
+                         location=os.environ.get("GOOGLE_CLOUD_LOCATION", "asia-northeast1"))
+            if _use_vertex() else genai.Client(api_key=api_key)
+        ).models.generate_content(model=model, contents=prompt)
+        text = (resp.text or "").strip()
+        if text.startswith("```"):
+            text = text.strip("`")
+            if text.lstrip().lower().startswith("json"):
+                text = text.lstrip()[4:]
+        try:
+            data = json.loads(text)
+        except Exception:
+            return None
+        return FixPlan(
+            vuln=vuln, name=p.name, file="（ソース非開示のため特定不可）",
+            location=p.location, summary=str(data.get("summary") or _advisory_text(vuln)),
+            diff="", source="Gemini",
+        )
 
     prompt = f"""あなたはセキュアコーディングの専門家です。やられ役サイト（Next.js/TypeScript）で
 次の脆弱性が実証されました。原因を特定し、安全な修正を提案してください。
