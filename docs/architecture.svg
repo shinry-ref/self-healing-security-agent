@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" font-family="'Segoe UI','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif">
+  <defs>
+    <marker id="aTeal" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#2dd4bf"/></marker>
+    <marker id="aRed" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#ff6b70"/></marker>
+    <marker id="aBlue" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#8ab4f8"/></marker>
+    <marker id="aMut" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#8b97a6"/></marker>
+  </defs>
+
+  <rect width="1200" height="720" fill="#0c1117"/>
+
+  <!-- title -->
+  <text x="600" y="46" fill="#e6edf3" font-size="26" font-weight="700" text-anchor="middle">アンチボディ — システムアーキテクチャ</text>
+  <text x="600" y="74" fill="#2dd4bf" font-size="14" text-anchor="middle" font-family="monospace">攻撃 → 原因特定 → 修正生成 → 適用/提示 → 再証明　の自己修復ループ</text>
+
+  <!-- user / browser -->
+  <rect x="36" y="300" width="200" height="150" rx="12" fill="#141b24" stroke="#263040"/>
+  <text x="136" y="334" fill="#e6edf3" font-size="16" font-weight="700" text-anchor="middle">ユーザー / ブラウザ</text>
+  <text x="136" y="362" fill="#8b97a6" font-size="12.5" text-anchor="middle">「診断開始」を押す</text>
+  <text x="136" y="384" fill="#8b97a6" font-size="12.5" text-anchor="middle">侵入マップ・ログ・</text>
+  <text x="136" y="402" fill="#8b97a6" font-size="12.5" text-anchor="middle">進捗・レポートを見る</text>
+  <text x="136" y="430" fill="#56647e" font-size="11" text-anchor="middle" font-family="monospace">SSE 購読</text>
+
+  <!-- Google Cloud container -->
+  <rect x="280" y="104" width="884" height="584" rx="16" fill="#0e1620" stroke="#2a6b7d" stroke-dasharray="6 5"/>
+  <text x="302" y="132" fill="#5ed1e6" font-size="14" font-weight="700" font-family="monospace">Google Cloud ・ asia-northeast1</text>
+
+  <!-- frontend (Cloud Run) -->
+  <rect x="306" y="156" width="252" height="112" rx="11" fill="#141b24" stroke="#263040"/>
+  <text x="322" y="182" fill="#56647e" font-size="10.5" font-family="monospace">CLOUD RUN</text>
+  <text x="322" y="206" fill="#e6edf3" font-size="16" font-weight="700">frontend（ダッシュボード）</text>
+  <text x="322" y="230" fill="#8b97a6" font-size="12.5">Next.js + D3-force</text>
+  <text x="322" y="250" fill="#8b97a6" font-size="12.5">侵入マップ・思考ログ・レポート</text>
+
+  <!-- agent (Cloud Run) -->
+  <rect x="306" y="322" width="252" height="176" rx="11" fill="#141b24" stroke="#263040"/>
+  <rect x="306" y="322" width="5" height="176" rx="2" fill="#2dd4bf"/>
+  <text x="326" y="348" fill="#56647e" font-size="10.5" font-family="monospace">CLOUD RUN</text>
+  <text x="326" y="372" fill="#e6edf3" font-size="16" font-weight="700">agent（診断エージェント）</text>
+  <text x="326" y="396" fill="#8b97a6" font-size="12.5">Python / FastAPI</text>
+  <text x="326" y="420" fill="#8b97a6" font-size="12.5">偵察 → 攻撃 → 修復 → 再証明</text>
+  <text x="326" y="440" fill="#8b97a6" font-size="12.5">許可リスト検査（完全一致のみ）</text>
+  <text x="326" y="460" fill="#8b97a6" font-size="12.5">進行を SSE 配信</text>
+  <text x="326" y="482" fill="#56647e" font-size="11.5" font-family="monospace">2モード：修正案 / 自律修正</text>
+
+  <!-- target (Cloud Run) -->
+  <rect x="306" y="552" width="252" height="112" rx="11" fill="#141b24" stroke="#5a2733"/>
+  <text x="322" y="578" fill="#56647e" font-size="10.5" font-family="monospace">CLOUD RUN ・ max-instances 1</text>
+  <text x="322" y="602" fill="#ff8198" font-size="16" font-weight="700">target（診断対象）</text>
+  <text x="322" y="626" fill="#8b97a6" font-size="12.5">NEKO MART（Next.js）</text>
+  <text x="322" y="646" fill="#8b97a6" font-size="12.5">9種の脆弱性 / 制御API</text>
+
+  <!-- antibody.config.json -->
+  <rect x="648" y="156" width="300" height="112" rx="11" fill="#11202a" stroke="#2a6b7d"/>
+  <text x="664" y="182" fill="#5ed1e6" font-size="11" font-family="monospace">対象リポジトリの設定</text>
+  <text x="664" y="206" fill="#e6edf3" font-size="15" font-weight="700" font-family="monospace">antibody.config.json</text>
+  <text x="664" y="230" fill="#8b97a6" font-size="12.5">endpoints（攻撃先）</text>
+  <text x="664" y="250" fill="#8b97a6" font-size="12.5">sourceMap（修正対象・自律修正用）</text>
+
+  <!-- Vertex AI -->
+  <rect x="648" y="322" width="300" height="130" rx="11" fill="#0e1726" stroke="#8ab4f8"/>
+  <rect x="664" y="338" width="118" height="20" rx="10" fill="#1b2a44"/>
+  <text x="723" y="352" fill="#8ab4f8" font-size="10.5" font-weight="700" text-anchor="middle" font-family="monospace">GOOGLE CLOUD AI</text>
+  <text x="664" y="384" fill="#e6edf3" font-size="16" font-weight="700">Vertex AI — Gemini 2.5 Flash</text>
+  <text x="664" y="410" fill="#8b97a6" font-size="12.5">脆弱性ごとに修正案／対策方針を生成</text>
+  <text x="664" y="432" fill="#8b97a6" font-size="12.5">サービスアカウント認証（鍵レス）</text>
+
+  <!-- Secret Manager -->
+  <rect x="648" y="490" width="300" height="92" rx="11" fill="#141b24" stroke="#263040"/>
+  <text x="664" y="520" fill="#e6edf3" font-size="15" font-weight="700">Secret Manager</text>
+  <text x="664" y="544" fill="#8b97a6" font-size="12.5">CONTROL_TOKEN / セッション署名鍵</text>
+  <text x="664" y="564" fill="#8b97a6" font-size="12.5">コマンドに平文で出さず注入</text>
+
+  <!-- CVE/NVD (external, optional) -->
+  <rect x="990" y="322" width="150" height="130" rx="11" fill="#141b24" stroke="#263040"/>
+  <text x="1065" y="372" fill="#e6edf3" font-size="14" font-weight="700" text-anchor="middle">CVE / NVD</text>
+  <text x="1065" y="396" fill="#8b97a6" font-size="11.5" text-anchor="middle">脆弱性データ</text>
+  <text x="1065" y="414" fill="#8b97a6" font-size="11.5" text-anchor="middle">との照合</text>
+
+  <!-- arrows -->
+  <!-- user <-> frontend -->
+  <line x1="236" y1="330" x2="300" y2="248" stroke="#2dd4bf" stroke-width="2" marker-end="url(#aTeal)"/>
+  <text x="208" y="286" fill="#9fe4f1" font-size="11.5" font-family="monospace">ページ配信</text>
+  <!-- user <-> agent (bidirectional) -->
+  <line x1="236" y1="372" x2="300" y2="392" stroke="#2dd4bf" stroke-width="2" marker-end="url(#aTeal)"/>
+  <text x="150" y="470" fill="#9fe4f1" font-size="11.5" font-family="monospace">診断開始・承認</text>
+  <line x1="300" y1="430" x2="236" y2="412" stroke="#2dd4bf" stroke-width="2" marker-end="url(#aTeal)"/>
+  <text x="150" y="490" fill="#9fe4f1" font-size="11.5" font-family="monospace">SSE 進行配信</text>
+
+  <!-- agent -> target (attack) -->
+  <line x1="432" y1="498" x2="432" y2="552" stroke="#ff6b70" stroke-width="2.4" marker-end="url(#aRed)"/>
+  <text x="446" y="528" fill="#ff8198" font-size="12" font-family="monospace">攻撃HTTP</text>
+  <text x="446" y="544" fill="#ff8198" font-size="12" font-family="monospace">control(reset・patch)</text>
+  <!-- target -> agent (evidence/defended) -->
+  <line x1="486" y1="552" x2="486" y2="498" stroke="#2dd4bf" stroke-width="2" marker-end="url(#aTeal)"/>
+
+  <!-- agent -> vertex -->
+  <line x1="558" y1="386" x2="648" y2="386" stroke="#8ab4f8" stroke-width="2.4" marker-end="url(#aBlue)"/>
+  <text x="560" y="378" fill="#8ab4f8" font-size="12" font-family="monospace">修正案生成</text>
+
+  <!-- agent -> secret -->
+  <line x1="558" y1="470" x2="648" y2="520" stroke="#8b97a6" stroke-width="1.8" marker-end="url(#aMut)"/>
+  <text x="556" y="508" fill="#8b97a6" font-size="11.5" font-family="monospace">鍵取得</text>
+
+  <!-- agent -> config -->
+  <line x1="520" y1="322" x2="700" y2="268" stroke="#8b97a6" stroke-width="1.8" marker-end="url(#aMut)"/>
+  <text x="556" y="300" fill="#8b97a6" font-size="11.5" font-family="monospace">対象設定を読む</text>
+
+  <!-- agent -> cve -->
+  <line x1="950" y1="400" x2="990" y2="392" stroke="#8b97a6" stroke-width="1.6" marker-end="url(#aMut)"/>
+
+  <!-- legend -->
+  <text x="302" y="676" fill="#56647e" font-size="11.5" font-family="monospace">
+    <tspan fill="#ff8198">■</tspan> 攻撃　<tspan fill="#2dd4bf">■</tspan> 制御・配信　<tspan fill="#8ab4f8">■</tspan> AI（Gemini）　<tspan fill="#8b97a6">■</tspan> 参照
+  </text>
+</svg>
