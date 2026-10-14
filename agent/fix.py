@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 from dataclasses import asdict, dataclass
 
 from plugins import PLUGINS, VulnId
@@ -50,6 +51,29 @@ def _advisory_text(vuln: VulnId) -> str:
         f"ソースコードを確認できないため具体的な差分は提示できません。"
         f"該当機能（{p.location}）に上記の対策を実装してください。"
     )
+
+
+def _extract_summary(text: str) -> str:
+    """Gemini 応答から指針の文面を取り出す。```フェンスや JSON を剥がし、
+    JSON でなければテキストそのものを返す（advisory は要約文1つで足りる）。"""
+    t = text.strip()
+    if t.startswith("```"):
+        t = t.strip("`")
+        if t.lstrip().lower().startswith("json"):
+            t = t.lstrip()[4:]
+        t = t.strip()
+    # JSON オブジェクトなら summary を優先
+    try:
+        data = json.loads(t)
+        if isinstance(data, dict) and data.get("summary"):
+            return str(data["summary"]).strip()
+    except Exception:
+        pass
+    # 本文中に JSON が埋まっている場合だけ拾う
+    m = re.search(r'"summary"\s*:\s*"([^"]+)"', t)
+    if m:
+        return m.group(1).strip()
+    return t  # 素のテキストを指針として使う
 
 
 def _advisory_fallback(vuln: VulnId) -> FixPlan:
@@ -120,17 +144,14 @@ def _gemini_fix(vuln: VulnId, evidence: str, api_key: str | None, black_box: boo
             if _use_vertex() else genai.Client(api_key=api_key)
         ).models.generate_content(model=model, contents=prompt)
         text = (resp.text or "").strip()
-        if text.startswith("```"):
-            text = text.strip("`")
-            if text.lstrip().lower().startswith("json"):
-                text = text.lstrip()[4:]
-        try:
-            data = json.loads(text)
-        except Exception:
-            return None
+        if not text:
+            return None  # 応答なし → フォールバックへ
+        # advisory は要約1文だけでよい。JSON で返れば summary を採り、そうでなければ
+        # 応答テキストそのものを指針として使う（Gemini 応答がありさえすれば指針にできる）。
+        summary = _extract_summary(text)
         return FixPlan(
             vuln=vuln, name=p.name, file="（ソース非開示のため特定不可）",
-            location=p.location, summary=str(data.get("summary") or _advisory_text(vuln)),
+            location=p.location, summary=summary or _advisory_text(vuln),
             diff="", source="Gemini",
         )
 
