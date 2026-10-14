@@ -439,7 +439,7 @@ export default function Dashboard({
                   padding: 24,
                 }}
               >
-                {running ? "対象を偵察しています…" : "「診断を開始」で、やられ役サイトへの侵入実証が始まります"}
+                {running ? "対象を偵察しています…" : "「診断を開始」で、対象サイトへの侵入実証が始まります"}
               </div>
             ) : (
               <IntrusionMap graph={graph} />
