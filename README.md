@@ -2,6 +2,14 @@
 
 > 第5回 Agentic AI Hackathon 提出作品
 
+## ライブデモ（Google Cloud Run）
+
+- **ダッシュボード**: https://antibody-frontend-545546547932.asia-northeast1.run.app
+- エージェント API: https://antibody-agent-545546547932.asia-northeast1.run.app
+- やられ役サイト（NEKO MART・診断デモ用）: https://antibody-target-545546547932.asia-northeast1.run.app
+
+ダッシュボードで「診断開始」を押すと、9種の脆弱性に対する 攻撃→修復→承認→再証明の自己修復ループが可視化されます。
+
 AIエージェントが **自作のやられ役サイト** に自律的に侵入して脆弱性を実証し、原因を特定して修正コードを生成、**人間の承認を得てから** 適用し、同じ攻撃を再実行して「今度は弾かれる」ことまで証明する — この **攻撃→修復→再証明の自己修復ループ** をリアルタイムに可視化するセキュリティ診断ツールです。
 
 ## 合法性の鉄則（最重要）
