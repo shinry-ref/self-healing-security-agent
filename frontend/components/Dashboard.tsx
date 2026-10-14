@@ -65,6 +65,8 @@ export default function Dashboard({
   const [loop, setLoop] = useState<LoopState | null>(null);
   const [approval, setApproval] = useState<Approval | null>(null);
   const [report, setReport] = useState<Report | null>(null);
+  // 修正の適用方式: propose=提案のみ（公開版） / apply=実際に直す（file・flag）
+  const [mode, setMode] = useState<string>("apply");
   const [error, setError] = useState<string | null>(null);
   const [showDiff, setShowDiff] = useState(false);
   const [approving, setApproving] = useState(false);
@@ -92,6 +94,7 @@ export default function Dashboard({
     setLoop(null);
     setApproval(null);
     setReport(null);
+    setMode("apply");
     setError(null);
     setShowDiff(false);
 
@@ -126,10 +129,16 @@ export default function Dashboard({
       setLogs((prev) => [...prev, { ...line, ts: nowTs() }]);
     });
     es.addEventListener("approval", (ev) => {
-      setApproval(JSON.parse((ev as MessageEvent).data));
+      const a = JSON.parse((ev as MessageEvent).data) as Approval;
+      setApproval(a);
+      if (a.mode) setMode(a.mode === "propose" ? "propose" : "apply");
       setShowDiff(false);
     });
-    es.addEventListener("report", (ev) => setReport(JSON.parse((ev as MessageEvent).data)));
+    es.addEventListener("report", (ev) => {
+      const r = JSON.parse((ev as MessageEvent).data) as Report;
+      setReport(r);
+      if (r.mode) setMode(r.mode);
+    });
     es.addEventListener("error", (ev) => {
       // ネットワーク断は data を持たない（その場合は EventSource の自動再接続に任せる）
       const data = (ev as MessageEvent).data;
@@ -385,7 +394,11 @@ export default function Dashboard({
             >
               <Stat label="発見した脆弱性" value={String(stats.found)} color="#F2F5FA" mono />
               <Stat label="到達した深さ" value={stats.depth} color="#F3B64B" />
-              <Stat label="修復済み" value={String(stats.patched)} color="#5FD08F" mono />
+              {mode === "propose" ? (
+                <Stat label="修正案を提示" value={String(stats.proposed ?? 0)} color="#F3B64B" mono />
+              ) : (
+                <Stat label="修復済み" value={String(stats.patched)} color="#5FD08F" mono />
+              )}
               <Stat label="抜いたレコード" value={stats.records.toLocaleString()} color="#FF8198" mono />
             </div>
           </div>
@@ -504,7 +517,9 @@ export default function Dashboard({
               </svg>
               <div style={{ flex: "1 1 300px", minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: "#F2F5FA" }}>
-                  {approval.name}の修正コードの適用には承認が必要です
+                  {approval.mode === "propose"
+                    ? `${approval.name}の修正案です（この公開版では自動適用しません）`
+                    : `${approval.name}の修正コードの適用には承認が必要です`}
                 </div>
                 <div style={{ fontSize: 12, color: "#8392AC", marginTop: 3, lineHeight: 1.5 }}>{approval.summary}</div>
                 <div style={{ fontSize: 11, color: "#6B7A92", marginTop: 3, fontFamily: "var(--font-mono)" }}>
@@ -561,7 +576,7 @@ export default function Dashboard({
                     opacity: approving ? 0.6 : 1,
                   }}
                 >
-                  {approving ? "送信中…" : "承認して適用"}
+                  {approving ? "送信中…" : approval.mode === "propose" ? "修正案を確定" : "承認して適用"}
                 </button>
               </div>
             </div>
@@ -669,8 +684,11 @@ function ReportBar({ report }: { report: Report }) {
         </svg>
         <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#F2F5FA" }}>診断レポート</h2>
         <span style={{ fontSize: 12, color: "#6B7A92", fontFamily: "var(--font-mono)" }}>
-          発見 {report.found} · 修復 {report.patched} · 到達 {report.depth} · 抜いたレコード{" "}
-          {report.records.toLocaleString()}
+          発見 {report.found} ·{" "}
+          {report.mode === "propose"
+            ? `修正案 ${report.proposed ?? 0}`
+            : `修復 ${report.patched}`}{" "}
+          · 到達 {report.depth} · 抜いたレコード {report.records.toLocaleString()}
         </span>
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
@@ -678,7 +696,16 @@ function ReportBar({ report }: { report: Report }) {
           const state = f.defended ? "defended" : f.breached ? "breached" : "safe";
           const col =
             state === "defended" ? "#5FD08F" : state === "breached" ? "#FF8198" : "#8392AC";
-          const tag = state === "defended" ? "修復済み" : state === "breached" ? "未修復" : "影響なし";
+          // 提案のみモードでは、突破された脆弱性は「修正案あり」（適用はしていない）
+          const tag =
+            state === "defended"
+              ? "修復済み"
+              : state === "breached"
+                ? f.proposed
+                  ? "修正案あり"
+                  : "未修復"
+                : "影響なし";
+          const tagCol = state === "breached" && f.proposed ? "#F3B64B" : col;
           return (
             <div
               key={f.vuln}
@@ -693,7 +720,7 @@ function ReportBar({ report }: { report: Report }) {
             >
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: "#E7EDF6" }}>{f.name}</span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: col, fontFamily: "var(--font-mono)" }}>{tag}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: tagCol, fontFamily: "var(--font-mono)" }}>{tag}</span>
               </div>
               <div style={{ fontSize: 11.5, color: "#6B7A92", marginTop: 5, lineHeight: 1.5 }}>
                 {f.location} · 重大度 {f.severity}

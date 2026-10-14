@@ -39,6 +39,7 @@ export interface LogLine {
 export interface Stats {
   found: number;
   patched: number;
+  proposed?: number;
   records: number;
   depth: string;
 }
@@ -81,6 +82,7 @@ export interface Approval {
   summary: string;
   diff: string;
   source: string;
+  mode?: string; // "propose" | "file" | "flag"
 }
 
 export interface Finding {
@@ -91,12 +93,15 @@ export interface Finding {
   fix: string;
   breached: boolean;
   defended: boolean;
+  proposed?: boolean;
 }
 
 export interface Report {
   target: string;
+  mode?: string; // "propose" | "apply"
   found: number;
   patched: number;
+  proposed?: number;
   records: number;
   depth: string;
   findings: Finding[];

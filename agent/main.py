@@ -34,6 +34,9 @@ import sourcefix
 from vulns import ATTACK_ORDER, CATALOG, VulnId
 
 CONTROL_TOKEN = os.environ.get("CONTROL_TOKEN", "antibody-dev-control")
+# 修正の適用方式（propose=提案のみ / file=実ソース書換 / flag=ランタイム切替）。
+# 既定は propose：公開URLでは状態を変えず「修正案を提示」するアドバイザリ動作。
+FIX_MODE = os.environ.get("FIX_MODE", "propose")
 
 # 抜けるダミーレコードの目安件数（被害の大きさを数値で見せるため）。プラグイン定義から導出。
 RECORDS: dict[VulnId, int] = {vid: p.records for vid, p in PLUGINS.items()}
@@ -200,18 +203,25 @@ def _depth_label(sess: Session) -> str:
     return "権限層"
 
 
-HEAL_STEPS = [
+# 修復フェーズの表示ステップ。適用する/しないでラベルと段数を変える。
+HEAL_STEPS_FIX = [
     ("cause", "侵入経路を解析"),
     ("gen", "修正コードを生成"),
     ("approve", "承認して適用"),
     ("reprove", "もう一度試して確認"),
 ]
+HEAL_STEPS_PROPOSE = [
+    ("cause", "侵入経路を解析"),
+    ("gen", "修正案を生成"),
+    ("approve", "修正案を提示"),
+]
 
 
 def _emit_loop(sess: Session, round_no: int, max_rounds: int, active: str | None,
-               done_keys: set[str], patched: list[str]) -> None:
+               done_keys: set[str], patched: list[str],
+               heal_steps: list[tuple[str, str]] = HEAL_STEPS_FIX) -> None:
     steps = []
-    for key, label in HEAL_STEPS:
+    for key, label in heal_steps:
         if key in done_keys:
             state = "done"
         elif key == active:
@@ -225,7 +235,14 @@ def _emit_loop(sess: Session, round_no: int, max_rounds: int, active: str | None
 async def run_loop(sess: Session) -> None:
     control = {"x-control-token": CONTROL_TOKEN}
     patched_names: list[str] = []
-    file_mode = sourcefix.enabled()  # 実ファイル修正モード（agent がリポジトリのソースを直接編集）
+    # 修正の適用方式。
+    #   propose（既定・公開版）: 修正案を提示するだけ。適用も再攻撃もしない（状態を変えない）
+    #   file: agent がリポジトリの実ソースを書き換え、HMR で反映して再攻撃で防御証明
+    #   flag: やられ役サイトのランタイム状態を control/patch で切替
+    file_mode = sourcefix.enabled()
+    fix_mode = FIX_MODE if not file_mode else "file"
+    propose_mode = fix_mode == "propose"
+    heal_steps = HEAL_STEPS_PROPOSE if propose_mode else HEAL_STEPS_FIX
     try:
         async with httpx.AsyncClient() as client:
             # 0) やられ役サイトを初期状態へ（全種を有効化・DBを再シード）
@@ -270,7 +287,7 @@ async def run_loop(sess: Session) -> None:
                 meta = CATALOG[vuln]
                 s_id, d_id = f"s_{vuln}", f"d_{vuln}"
                 sess.emit("status", {"state": "attacking", "round": i, "maxRounds": max_rounds})
-                _emit_loop(sess, i, max_rounds, None, set(), patched_names)
+                _emit_loop(sess, i, max_rounds, None, set(), patched_names, heal_steps)
 
                 # 攻撃（試行中）
                 _set_node(sess, s_id, "active")
@@ -298,26 +315,41 @@ async def run_loop(sess: Session) -> None:
 
                 # 自己修復：原因特定 → 修正生成
                 sess.emit("status", {"state": "fixing", "round": i, "maxRounds": max_rounds})
-                _emit_loop(sess, i, max_rounds, "cause", set(), patched_names)
+                _emit_loop(sess, i, max_rounds, "cause", set(), patched_names, heal_steps)
                 _log(sess, "原因特定", f"突破された原因コードを特定中…")
                 plan = await generate_fix(vuln, res.evidence)
-                _emit_loop(sess, i, max_rounds, "gen", {"cause"}, patched_names)
+                _emit_loop(sess, i, max_rounds, "gen", {"cause"}, patched_names, heal_steps)
                 _log(sess, "修復案", f"{plan.location} の修正案を生成（{plan.source}）")
 
                 # 承認（人間の制御ポイント）
                 sess.emit("status", {"state": "awaiting_approval", "round": i, "maxRounds": max_rounds})
-                _emit_loop(sess, i, max_rounds, "approve", {"cause", "gen"}, patched_names)
+                _emit_loop(sess, i, max_rounds, "approve", {"cause", "gen"}, patched_names, heal_steps)
                 sess.emit("approval", {
                     "vuln": vuln, "name": plan.name, "file": plan.file,
                     "location": plan.location, "summary": plan.summary,
-                    "diff": plan.diff, "source": plan.source,
+                    "diff": plan.diff, "source": plan.source, "mode": fix_mode,
                 })
-                _log(sess, "承認待ち", f"修正コードの適用には承認が必要です（{plan.location}）", "warn")
+                if propose_mode:
+                    _log(sess, "提案待ち", f"修正案を提示しました（公開版のため自動適用はしません）: {plan.location}", "warn")
+                else:
+                    _log(sess, "承認待ち", f"修正コードの適用には承認が必要です（{plan.location}）", "warn")
 
                 approved = await sess.wait_approval()
+
+                # 提案のみモード（公開版）：適用も再攻撃もしない。原因と修正案の提示で完了。
+                if propose_mode:
+                    if approved:
+                        sess.stats["proposed"] = sess.stats.get("proposed", 0) + 1
+                        sess.emit("stats", sess.stats)
+                        _log(sess, "提案", f"{meta.name} の修正案を確定（{plan.file}）。適用は運用側で実施", "success")
+                    else:
+                        _log(sess, "提案", "この修正案は見送られました", "warn")
+                    _emit_loop(sess, i, max_rounds, None, {"cause", "gen", "approve"}, patched_names, heal_steps)
+                    continue
+
                 if not approved:
                     _log(sess, "承認", "承認されず。この修正は適用しません", "warn")
-                    _emit_loop(sess, i, max_rounds, None, {"cause", "gen"}, patched_names)
+                    _emit_loop(sess, i, max_rounds, None, {"cause", "gen"}, patched_names, heal_steps)
                     continue
 
                 # 適用（承認後に修正を反映）
@@ -339,7 +371,7 @@ async def run_loop(sess: Session) -> None:
 
                 # 再攻撃で防御証明（file_mode では HMR の反映を少し待ちながら再試行）
                 sess.emit("status", {"state": "reproving", "round": i, "maxRounds": max_rounds})
-                _emit_loop(sess, i, max_rounds, "reprove", {"cause", "gen", "approve"}, patched_names)
+                _emit_loop(sess, i, max_rounds, "reprove", {"cause", "gen", "approve"}, patched_names, heal_steps)
                 _log(sess, "再チェック", "同じ攻撃をもう一度実行して確認…", "active")
                 res2 = await attack(client, sess.target, vuln)
                 if file_mode:
@@ -358,15 +390,18 @@ async def run_loop(sess: Session) -> None:
                     sess.emit("stats", sess.stats)
                     _log(sess, "防御確認", f"今度は弾かれた — {res2.evidence}", "success")
                     _emit_loop(sess, i, max_rounds, None,
-                               {"cause", "gen", "approve", "reprove"}, patched_names)
+                               {"cause", "gen", "approve", "reprove"}, patched_names, heal_steps)
                 else:
                     _log(sess, "再チェック", f"まだ破れる（{res2.evidence}）", "warn")
 
             # 4) 完了・レポート（report → status:done の順。done で接続を閉じる前に届かせる）
             sess.stats["depth"] = _depth_label(sess)
             sess.emit("stats", sess.stats)
-            sess.emit("report", _build_report(sess, order, patched_names))
-            _log(sess, "完了", f"診断を完了。発見 {sess.stats['found']} 件 / 修復 {sess.stats['patched']} 件", "success")
+            sess.emit("report", _build_report(sess, order, patched_names, propose_mode))
+            if propose_mode:
+                _log(sess, "完了", f"診断を完了。発見 {sess.stats['found']} 件 / 修正案 {sess.stats.get('proposed', 0)} 件を提示", "success")
+            else:
+                _log(sess, "完了", f"診断を完了。発見 {sess.stats['found']} 件 / 修復 {sess.stats['patched']} 件", "success")
             sess.emit("status", {"state": "done", "round": max_rounds, "maxRounds": max_rounds})
     except Exception as e:  # noqa
         sess.emit("error", {"message": f"診断中にエラー: {e}"})
@@ -376,21 +411,27 @@ async def run_loop(sess: Session) -> None:
         sess.queue.put_nowait(None)
 
 
-def _build_report(sess: Session, order: list[VulnId], patched: list[str]) -> dict:
+def _build_report(sess: Session, order: list[VulnId], patched: list[str],
+                  propose_mode: bool = False) -> dict:
     findings = []
     for vid in order:
         meta = CATALOG[vid]
         node = sess.nodes.get(f"d_{vid}", {})
+        breached = node.get("state") in ("breached", "defended")
         findings.append({
             "vuln": vid, "name": meta.name, "severity": meta.severity,
             "location": meta.location, "fix": meta.fix,
-            "breached": node.get("state") in ("breached", "defended"),
+            "breached": breached,
             "defended": node.get("state") == "defended",
+            # 提案のみモードでは、見つかった脆弱性に修正案を提示した状態
+            "proposed": bool(propose_mode and breached),
         })
     return {
         "target": sess.target,
+        "mode": "propose" if propose_mode else "apply",
         "found": sess.stats["found"],
         "patched": sess.stats["patched"],
+        "proposed": sess.stats.get("proposed", 0),
         "records": sess.stats["records"],
         "depth": sess.stats["depth"],
         "findings": findings,
