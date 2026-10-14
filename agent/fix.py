@@ -42,10 +42,17 @@ def _fallback(vuln: VulnId) -> FixPlan:
     )
 
 
+def _use_vertex() -> bool:
+    """Vertex AI モード（Cloud Run ではサービスアカウント認証＝鍵レス）を使うか。"""
+    v = os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").strip().lower()
+    return v in ("1", "true", "yes")
+
+
 async def generate_fix(vuln: VulnId, evidence: str) -> FixPlan:
     """突破された脆弱性の修正案を生成する。Gemini が使えればそれで、だめなら実コード対応の確実な差分で。"""
     api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
+    # Vertex AI は鍵不要（ADC）。AI Studio は GEMINI_API_KEY が要る。どちらも無ければフォールバック。
+    if not _use_vertex() and not api_key:
         return _fallback(vuln)
     try:
         plan = await asyncio.wait_for(
@@ -57,7 +64,7 @@ async def generate_fix(vuln: VulnId, evidence: str) -> FixPlan:
         return _fallback(vuln)
 
 
-def _gemini_fix(vuln: VulnId, evidence: str, api_key: str) -> FixPlan | None:
+def _gemini_fix(vuln: VulnId, evidence: str, api_key: str | None) -> FixPlan | None:
     """Gemini に原因と安全な修正を JSON で答えさせる。失敗時は None（フォールバックへ）。"""
     from google import genai  # 遅延 import（鍵が無い環境を壊さない）
 
@@ -80,9 +87,15 @@ def _gemini_fix(vuln: VulnId, evidence: str, api_key: str) -> FixPlan | None:
 次の JSON だけを返す（前後に文章を付けない）:
 {{"summary": "何をなぜ直すかを日本語1〜2文で", "location": "file:line 形式の箇所", "diff": "unified diff 風のテキスト"}}"""
 
-    resp = genai.Client(api_key=api_key).models.generate_content(
-        model=model, contents=prompt
-    )
+    if _use_vertex():
+        # Cloud Run のサービスアカウント（ADC）で認証。鍵は不要。
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        location = os.environ.get("GOOGLE_CLOUD_LOCATION", "asia-northeast1")
+        client = genai.Client(vertexai=True, project=project, location=location)
+    else:
+        client = genai.Client(api_key=api_key)
+
+    resp = client.models.generate_content(model=model, contents=prompt)
     text = (resp.text or "").strip()
     if text.startswith("```"):
         # ```json ... ``` のコードフェンスを剥がす
