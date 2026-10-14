@@ -1,0 +1,44 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+:root {
+  --bg: #0f1420;
+  --panel: #121826;
+  --line: #222b3d;
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: #dde3ec;
+  font-family: var(--font-display);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 診断の経過ログのスクロール */
+.mamori-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #2c3850 transparent;
+}
+.mamori-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.mamori-scroll::-webkit-scrollbar-thumb {
+  background: #2c3850;
+  border-radius: 8px;
+}
+
+@keyframes mamori-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.mamori-pulse {
+  animation: mamori-pulse 1.4s ease-in-out infinite;
+}

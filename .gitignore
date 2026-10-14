@@ -1,0 +1,40 @@
+# dependencies
+node_modules/
+**/node_modules/
+
+# python
+__pycache__/
+*.py[cod]
+agent/.venv/
+agent/venv/
+
+# next.js
+.next/
+**/.next/
+out/
+**/out/
+next-env.d.ts
+
+# production
+build/
+dist/
+
+# env / secrets
+.env
+.env*.local
+**/.env
+**/.env*.local
+!**/.env.example
+
+# data (生成される SQLite 等)
+*.sqlite
+*.sqlite3
+*.db
+target/data/*.sqlite*
+
+# misc
+.DS_Store
+*.log
+npm-debug.log*
+.vercel
+coverage/
