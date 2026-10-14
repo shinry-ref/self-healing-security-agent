@@ -1,7 +1,16 @@
 // やられ役サイトに仕込む脆弱性の種類と、その実行時状態を表す型。
 // 攻撃対象（enabled）であり、まだ修正されていない（!patched）とき「脆弱」。
 
-export type VulnId = "sqli" | "xss" | "auth" | "access" | "misconfig";
+export type VulnId =
+  | "sqli"
+  | "xss"
+  | "auth"
+  | "access"
+  | "misconfig"
+  | "pathtraversal"
+  | "cmdi"
+  | "jwt"
+  | "ssrf";
 
 export const ALL_VULNS: VulnId[] = [
   "sqli",
@@ -9,6 +18,10 @@ export const ALL_VULNS: VulnId[] = [
   "auth",
   "access",
   "misconfig",
+  "pathtraversal",
+  "cmdi",
+  "jwt",
+  "ssrf",
 ];
 
 export type Severity = "high" | "medium" | "low";

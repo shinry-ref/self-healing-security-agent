@@ -28,19 +28,14 @@ from allowlist import allowed_targets, is_allowed
 from attack import attack
 from cve import match_candidates
 from fix import generate_fix
+from plugins import PLUGINS
 from recon import run_recon
 from vulns import ATTACK_ORDER, CATALOG, VulnId
 
 CONTROL_TOKEN = os.environ.get("CONTROL_TOKEN", "antibody-dev-control")
 
-# 抜けるダミーレコードの目安件数（被害の大きさを数値で見せるため）。
-RECORDS: dict[VulnId, int] = {
-    "sqli": 3,       # users（認証DB）
-    "auth": 1,       # 管理者セッション
-    "access": 3,     # 他人の注文
-    "misconfig": 3,  # 全ユーザー（パスワード・カード番号含む）
-    "xss": 2,        # レビュー
-}
+# 抜けるダミーレコードの目安件数（被害の大きさを数値で見せるため）。プラグイン定義から導出。
+RECORDS: dict[VulnId, int] = {vid: p.records for vid, p in PLUGINS.items()}
 
 app = FastAPI(title="アンチボディ エージェント")
 app.add_middleware(

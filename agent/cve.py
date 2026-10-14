@@ -1,7 +1,8 @@
 """照合：偵察で特定した技術を脆弱性DB／自前データと突き合わせ、攻撃候補を作る。
 
-本番では CVE/NVD を引く余地を残しつつ、デモの確実性のため自前データ（OWASP Top 10 /
-CWE に対応づけた既知パターン）を主に使う。ENABLE_NVD=1 のとき NVD API も参照する。
+自前データ（OWASP Top 10 / CWE に対応づけた既知パターン）は plugins.py の各 Plugin が
+持つ cwe / owasp / note から導く。ENABLE_NVD=1 のとき本物の NVD API も参照して注記を
+補強する（デモは自前データ中心なので任意）。
 """
 from __future__ import annotations
 
@@ -10,7 +11,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from vulns import ATTACK_ORDER, CATALOG, VulnId
+from plugins import ATTACK_ORDER, PLUGINS, VulnId
 
 
 @dataclass
@@ -23,36 +24,20 @@ class Candidate:
     note: str
 
 
-# 自前データ：5パターンを CWE / OWASP に対応づけたもの
-SELF_DB: dict[VulnId, dict[str, str]] = {
-    "sqli": {"cwe": "CWE-89", "owasp": "A03:2021 インジェクション",
-             "note": "ユーザー入力をSQLに連結する実装は古典的な攻撃対象"},
-    "xss": {"cwe": "CWE-79", "owasp": "A03:2021 インジェクション",
-            "note": "出力エスケープ漏れによる格納型XSS"},
-    "auth": {"cwe": "CWE-330", "owasp": "A07:2021 識別と認証の失敗",
-             "note": "推測可能なセッショントークン"},
-    "access": {"cwe": "CWE-639", "owasp": "A01:2021 アクセス制御の不備",
-               "note": "所有者チェック欠如による IDOR"},
-    "misconfig": {"cwe": "CWE-200", "owasp": "A05:2021 セキュリティ設定ミス",
-                  "note": "デバッグ情報の意図しない公開"},
-}
-
-
 async def match_candidates(
     client: httpx.AsyncClient, tech: list[str]
 ) -> list[Candidate]:
     candidates: list[Candidate] = []
     for vid in ATTACK_ORDER:
-        meta = CATALOG[vid]
-        info = SELF_DB[vid]
+        p = PLUGINS[vid]
         candidates.append(
             Candidate(
                 vuln=vid,
-                name=meta.name,
-                cwe=info["cwe"],
-                owasp=info["owasp"],
+                name=p.name,
+                cwe=p.cwe,
+                owasp=p.owasp,
                 source="自前データ",
-                note=info["note"],
+                note=p.note,
             )
         )
 

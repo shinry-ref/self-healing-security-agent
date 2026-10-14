@@ -48,6 +48,42 @@ export const CATALOG: Record<VulnId, VulnMeta> = {
     severity: "medium",
     endpoint: "GET /api/debug",
   },
+  pathtraversal: {
+    id: "pathtraversal",
+    name: "パストラバーサル",
+    location: "ファイル取得",
+    attack: "?name=../ でサーバ内の任意ファイルを読む",
+    fix: "ファイル名を basename に限定し公開ディレクトリ内へ閉じ込める",
+    severity: "high",
+    endpoint: "GET /api/files",
+  },
+  cmdi: {
+    id: "cmdi",
+    name: "コマンドインジェクション",
+    location: "ネットワーク診断ツール",
+    attack: "入力を OS コマンドへ連結し任意コマンドを実行",
+    fix: "シェルを介さず入力を厳格に検証する",
+    severity: "high",
+    endpoint: "GET /api/net-tool",
+  },
+  jwt: {
+    id: "jwt",
+    name: "JWT改ざん（alg=none）",
+    location: "APIセッション",
+    attack: "alg=none の署名なしトークンで権限昇格",
+    fix: "alg=none を拒否し HS256 署名を必須にする",
+    severity: "high",
+    endpoint: "GET /api/session",
+  },
+  ssrf: {
+    id: "ssrf",
+    name: "SSRF",
+    location: "URL取り込み",
+    attack: "内部アドレスへリクエストを向けさせ機密を奪う",
+    fix: "内部・プライベート宛先を遮断し許可リストに限定する",
+    severity: "high",
+    endpoint: "GET /api/fetch",
+  },
 };
 
 export function metaOf(id: VulnId): VulnMeta {
