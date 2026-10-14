@@ -326,7 +326,7 @@ export default function Dashboard({
         </div>
 
         <div style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
-          <span style={{ fontSize: 12, color: "#6B7A92" }}>ラウンド</span>
+          <span style={{ fontSize: 12, color: "#6B7A92" }}>進捗</span>
           <span style={{ fontSize: 17, fontWeight: 700, fontFamily: "var(--font-mono)", color: "#F2F5FA" }}>
             {status.round}
           </span>
