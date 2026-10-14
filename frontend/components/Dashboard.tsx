@@ -792,6 +792,39 @@ function FindingCard({ f }: { f: Finding }) {
         {f.location} · 重大度 {f.severity}
         {f.source ? ` · 生成元: ${f.source}` : ""}
       </div>
+      {/* 攻撃の実行内容：どのパスへ・どんなクエリ/ペイロードを送り・何が起きたか */}
+      {(f.request || f.payload || f.evidence) && (
+        <div
+          style={{
+            marginTop: 8,
+            padding: "9px 11px",
+            borderRadius: 8,
+            background: "#0A0E17",
+            border: "1px solid #24304A",
+            fontSize: 11.5,
+            lineHeight: 1.6,
+          }}
+        >
+          {f.request && (
+            <div style={{ fontFamily: "var(--font-mono)", color: "#FF8198" }}>
+              <span style={{ color: "#6B7A92" }}>攻撃 </span>
+              {f.request}
+            </div>
+          )}
+          {f.payload && (
+            <div style={{ fontFamily: "var(--font-mono)", color: "#C2CDDE", marginTop: 3, wordBreak: "break-all" }}>
+              <span style={{ color: "#6B7A92" }}>入力 </span>
+              {f.payload}
+            </div>
+          )}
+          {f.evidence && (
+            <div style={{ color: "#9FB0C8", marginTop: 4 }}>
+              <span style={{ color: "#6B7A92", fontFamily: "var(--font-mono)" }}>結果 </span>
+              {f.evidence}
+            </div>
+          )}
+        </div>
+      )}
       {/* Gemini が出した修正案／対策方針の本文 */}
       {f.summary ? (
         <div style={{ fontSize: 12.5, color: "#C2CDDE", marginTop: 7, lineHeight: 1.6 }}>{f.summary}</div>

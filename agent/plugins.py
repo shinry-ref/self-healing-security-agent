@@ -476,3 +476,22 @@ ATTACK_ORDER: list[VulnId] = [
     "sqli", "auth", "jwt", "access", "ssrf",
     "pathtraversal", "cmdi", "misconfig", "xss",
 ]
+
+# 各脆弱性の HTTP メソッドと既定パス（レポートに「どのパスを叩いたか」を出すため）。
+# 実際のパスは manifest.endpoint で上書きされうる。
+METHODS: dict[VulnId, str] = {
+    "sqli": "POST", "auth": "GET", "jwt": "GET", "access": "GET", "ssrf": "GET",
+    "pathtraversal": "GET", "cmdi": "GET", "misconfig": "GET", "xss": "POST",
+}
+ENDPOINT_DEFAULTS: dict[VulnId, str] = {
+    "sqli": "/api/login", "auth": "/api/me", "jwt": "/api/session",
+    "access": "/api/orders/1002", "ssrf": "/api/fetch", "pathtraversal": "/api/files",
+    "cmdi": "/api/net-tool", "misconfig": "/api/debug", "xss": "/api/products/1/reviews",
+}
+
+
+def request_line(vuln: VulnId) -> str:
+    """レポート表示用の『メソッド パス』。実パスは manifest 設定を反映。"""
+    method = METHODS.get(vuln, "GET")
+    path = manifest.endpoint(vuln, ENDPOINT_DEFAULTS.get(vuln, ""))
+    return f"{method} {path}".strip()

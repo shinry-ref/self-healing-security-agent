@@ -28,6 +28,7 @@ from allowlist import allowed_targets, is_allowed
 from attack import attack
 from cve import match_candidates
 from fix import generate_fix
+import plugins
 from plugins import PLUGINS
 from recon import run_recon
 import sourcefix
@@ -349,8 +350,13 @@ async def run_loop(sess: Session) -> None:
                 plan = await generate_fix(vuln, res.evidence, black_box=black_box)
                 _emit_loop(sess, i, max_rounds, "gen", {"cause"}, patched_names, heal_steps)
                 _log(sess, "修復案", f"{plan.location} の修正案を生成（{plan.source}）")
-                # レポート用に詳細（要約・差分・生成元）を記録（全モード）
-                sess.details[vuln] = {**plan.to_dict(), "mode": fix_mode}
+                # レポート用に詳細（攻撃リクエスト・ペイロード・証拠・修正）を記録（全モード）
+                sess.details[vuln] = {
+                    **plan.to_dict(), "mode": fix_mode,
+                    "request": plugins.request_line(vuln),  # 例: GET /api/files
+                    "payload": res.payload,                 # 送った具体的なクエリ/ボディ
+                    "evidence": res.evidence,               # 侵入で得られた結果
+                }
 
                 # 提示のみモード（advisory / propose）：承認で止めず、提案を記録して次へ。
                 # 開始を押したら全脆弱性を探索し、最後にレポートとして一括提示する。
@@ -446,6 +452,10 @@ def _build_report(sess: Session, order: list[VulnId], patched: list[str],
             "diff": d.get("diff", ""),
             "source": d.get("source", ""),
             "fixFile": d.get("file", ""),
+            # 攻撃の実行内容（どのパスへ・どんなクエリ/ペイロードを送り・何が起きたか）
+            "request": d.get("request", ""),
+            "payload": d.get("payload", ""),
+            "evidence": d.get("evidence", ""),
         })
     return {
         "target": sess.target,

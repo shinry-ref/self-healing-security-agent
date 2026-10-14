@@ -98,6 +98,9 @@ export interface Finding {
   diff?: string; // 具体差分（propose/file のみ。advisory は空）
   source?: string; // "Gemini" | "フォールバック"
   fixFile?: string; // 直す対象ファイル（advisory は「非開示」）
+  request?: string; // 実行した攻撃リクエスト（例: GET /api/files）
+  payload?: string; // 送ったクエリ/ペイロードの具体
+  evidence?: string; // 侵入で得られた結果
 }
 
 export interface Report {
